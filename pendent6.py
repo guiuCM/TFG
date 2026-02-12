@@ -88,6 +88,10 @@ class GridToTinIncremental:
         
         # CÀLCUL DE L'ERROR ANGULAR
         dot_product = np.einsum('ij,ij->i', real_normals, tin_normals) # Producte escalar
+        
+        # Limitar dot_product a [-1, 1] per evitar errors numèrics
+        dot_product = np.clip(dot_product, -1.0, 1.0)
+        
         angles_rad = np.arccos(dot_product)
         angles_deg = np.degrees(angles_rad)
         
@@ -231,13 +235,13 @@ class GridToTinIncremental:
         nz = tri_normals[:, 2]
         slopes = np.degrees(np.arctan(np.sqrt(nx**2 + ny**2) / nz))
         
-        print(f"Pendent: min={slopes.min():.4f}, max={slopes.max():.4f}, mean={slopes.mean():.4f}")
-        for tri_idx, simplex in enumerate(self.tin.simplices):
-            z_vals = [self.tin_z_values[simplex[0]], self.tin_z_values[simplex[1]], self.tin_z_values[simplex[2]]]
-            print(f"  Triangle {tri_idx}: z = {z_vals}, pendent = {slopes[tri_idx]:.2f} graus")   
-            x_vals = self.tin.points[simplex, 0]
-            y_vals = self.tin.points[simplex, 1]
-            print(f"    Vèrtexs: ({x_vals[0]:.2f}, {y_vals[0]:.2f}), ({x_vals[1]:.2f}, {y_vals[1]:.2f}), ({x_vals[2]:.2f}, {y_vals[2]:.2f})")
+        # print(f"Pendent: min={slopes.min():.4f}, max={slopes.max():.4f}, mean={slopes.mean():.4f}")
+        # for tri_idx, simplex in enumerate(self.tin.simplices):
+        #     z_vals = [self.tin_z_values[simplex[0]], self.tin_z_values[simplex[1]], self.tin_z_values[simplex[2]]]
+        #     print(f"  Triangle {tri_idx}: z = {z_vals}, pendent = {slopes[tri_idx]:.2f} graus")   
+        #     x_vals = self.tin.points[simplex, 0]
+        #     y_vals = self.tin.points[simplex, 1]
+        #     print(f"    Vèrtexs: ({x_vals[0]:.2f}, {y_vals[0]:.2f}), ({x_vals[1]:.2f}, {y_vals[1]:.2f}), ({x_vals[2]:.2f}, {y_vals[2]:.2f})")
 
         #PolyCollection
         pts = self.tin.points
@@ -319,7 +323,7 @@ class GridToTinIncremental:
         # Crear Delaunay amb 5 punts
         self.tin = Delaunay(np.array(initial_points_xy), incremental=True)
         
-        print(f"Iteració 0: punts totals = {len(self.tin.points)}")
+        # print(f"Iteració 0: punts totals = {len(self.tin.points)}")
                 
         iteration = 0
         new_xy = None
@@ -341,26 +345,28 @@ class GridToTinIncremental:
             max_error = errors[worst_local_idx]
             
             # DEBUG: mostrar errors de tots els candidats per entendre la distribució
-            if iteration <= 5:
-                print(f"\nIteració {iteration}:")
-                print(f"  Errors de candidats: min={errors.min():.4f}, max={errors.max():.4f}, mean={errors.mean():.4f}")
-                print(f" ALçada dels punts de cada triangle:")
-                for tri_idx, simplex in enumerate(self.tin.simplices):
-                    z_vals = [self.tin_z_values[v_idx] for v_idx in simplex]
-                    print(f"  Triangle {tri_idx}: z = {z_vals}")
-                print(f"  Nombre triangles: {len(self.tin.simplices)}")
-                print(f"  Punts TIN: {len(self.tin.points)}")
-                # Mostrar punts amb error > 1 grau
-                high_error_mask = errors > 1.0
-                if np.any(high_error_mask):
-                    high_error_indices = np.array(candidate_indices)[high_error_mask]
-                    print(f"  Punts amb error > 1 grau: {high_error_indices[:5]}...")  # Mostrar primers 5
-                    for idx in high_error_indices[:3]:
-                        r, c = divmod(idx, self.cols)
-                        z_val = self.h_grid[r, c]
-                        print(f"    Punt idx={idx}, pos=({r},{c}), z={z_val:.1f}, error={errors[candidate_indices.index(idx)]:.2f}°")
+            # if iteration <= 5:
+            #     print(f"\nIteració {iteration}:")
+            #     print(f"  Errors de candidats: min={errors.min():.4f}, max={errors.max():.4f}, mean={errors.mean():.4f}")
+            #     print(f" ALçada dels punts de cada triangle:")
+            #     for tri_idx, simplex in enumerate(self.tin.simplices):
+            #         z_vals = [self.tin_z_values[v_idx] for v_idx in simplex]
+            #         print(f"  Triangle {tri_idx}: z = {z_vals}")
+            #     print(f"  Nombre triangles: {len(self.tin.simplices)}")
+            #     print(f"  Punts TIN: {len(self.tin.points)}")
+            #     # Mostrar punts amb error > 1 grau
+            #     high_error_mask = errors > 1.0
+            #     if np.any(high_error_mask):
+            #         high_error_indices = np.array(candidate_indices)[high_error_mask]
+            #         print(f"  Punts amb error > 1 grau: {high_error_indices[:5]}...")  # Mostrar primers 5
+            #         for idx in high_error_indices[:3]:
+            #             r, c = divmod(idx, self.cols)
+            #             z_val = self.h_grid[r, c]
+            #             print(f"    Punt idx={idx}, pos=({r},{c}), z={z_val:.1f}, error={errors[candidate_indices.index(idx)]:.2f}°")
             
-            print(f"Iteració {iteration}: max_error = {max_error:.6f} graus, punts totals = {len(self.tin.points)}")
+            # Imprimir solo cada 10 iteraciones
+            if iteration % 10 == 0:
+                print(f"Iteració {iteration}: max_error = {max_error:.6f} graus, punts totals = {len(self.tin.points)}")
             
             if max_error <= 0.001: break
                 
@@ -370,8 +376,8 @@ class GridToTinIncremental:
             self.tin_z_values.append(new_z)
             candidate_indices.pop(worst_local_idx)
             
-            if snapshot_dir and (iteration % snapshot_interval == 0):
-                print(f"iteració {iteration}...")
+            if snapshot_dir and (iteration % snapshot_interval == 10):
+                # print(f"iteració {iteration}...")
                 self._save_snapshot(iteration, new_xy, snapshot_dir)
                 self._save_snapshot_slope(iteration, new_xy, snapshot_dir)
             
@@ -382,6 +388,13 @@ class GridToTinIncremental:
         if snapshot_dir and new_xy is not None:
             self._save_snapshot(iteration, new_xy, snapshot_dir)
             self._save_snapshot_slope(iteration, new_xy, snapshot_dir)
+        
+        # VERIFICACIÓ: Comprovar si els punts i les Z estan sincronitzats
+        print(f"\n[DEBUG] Verificant sincronització punts-Z:")
+        print(f"  Nombre de punts XY al TIN: {len(self.tin.points)}")
+        print(f"  Nombre de valors Z: {len(self.tin_z_values)}")
+        if len(self.tin.points) != len(self.tin_z_values):
+            print("  ⚠️ ALERTA: Desincronització detectada!")
             
         return self.tin.points, self.tin.simplices
 
@@ -433,10 +446,10 @@ class GridToTinIncremental:
         plt.show()
 
 if __name__ == "__main__":
-    converter = GridToTinIncremental(step=1, pixel_size=1.0, target_point_count=20)
+    converter = GridToTinIncremental(step=1, pixel_size=2.0, target_point_count=2000)
     
     t0 = time.perf_counter()
-    verts, triangles = converter.fit('prova_oscar.npy', snapshot_dir='snapshots_tin3', snapshot_interval=1)
+    verts, triangles = converter.fit('bassiero.npy', snapshot_dir='snapshots_tin_pendent_video', snapshot_interval=1)
     t1 = time.perf_counter()
     print(f"Temps total: {t1 - t0:.2f} segons")
  

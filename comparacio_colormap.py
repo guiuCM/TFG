@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import TwoSlopeNorm
-from classes import GridToTinConverter
+from original import GridToTinConverter
 from pendent6 import GridToTinIncremental
 import time
 
@@ -9,14 +9,11 @@ import time
 FILENAME = 'bassiero.npy'
 STEP = 1
 PIXEL_SIZE = 2.0
-TARGET_POINTS = 2000
+TARGET_POINTS = 500
 
-
+#passa de nou la malla a pixels, per a que les coordenades del TIN estiguin en metres i no en índexs de la matriu
 def interpolate_tin_heights(tin, z_values, rows, cols, step, pixel_size):
-    """
-    Interpola les alçades del TIN a tots els punts del grid.
-    Retorna una matriu 2D amb les alçades interpolades.
-    """
+
     spacing = step * pixel_size
     z_array = np.array(z_values)
     
@@ -62,6 +59,56 @@ def calculate_slope_from_heights(h_grid, spacing):
     """
     dy, dx = np.gradient(h_grid, spacing, spacing)
     return np.sqrt(dx**2 + dy**2)
+
+
+def calculate_slope_from_tin_normals(tin, z_values, rows, cols, step, pixel_size):
+    """
+    Calcula el pendent directament des de les normals dels triangles del TIN,
+    sense interpolar alçades primer.
+    """
+    spacing = step * pixel_size
+    
+    # Crear coordenades de tots els punts del grid
+    r_indices, c_indices = np.arange(rows), np.arange(cols)
+    rr, cc = np.meshgrid(r_indices, c_indices, indexing='ij')
+    x_coords = cc.ravel() * spacing
+    y_coords = rr.ravel() * spacing
+    query_xy = np.column_stack((x_coords, y_coords))
+    
+    # Trobar triangle per a cada punt
+    simplex_ids = tin.find_simplex(query_xy)
+    
+    # Calcular normals de tots els triangles
+    z_array = np.array(z_values)
+    tris = tin.simplices
+    pts = tin.points
+    
+    p0 = np.column_stack((pts[tris[:, 0], 0], pts[tris[:, 0], 1], z_array[tris[:, 0]]))
+    p1 = np.column_stack((pts[tris[:, 1], 0], pts[tris[:, 1], 1], z_array[tris[:, 1]]))
+    p2 = np.column_stack((pts[tris[:, 2], 0], pts[tris[:, 2], 1], z_array[tris[:, 2]]))
+    
+    u = p1 - p0
+    v = p2 - p0
+    normals = np.cross(u, v)
+    
+    # Normalitzar
+    norms = np.linalg.norm(normals, axis=1, keepdims=True)
+    normals = normals / norms
+    
+    # Assegurar que apunta amunt
+    flip = normals[:, 2] < 0
+    normals[flip] *= -1
+    
+    # Calcular pendent per cada triangle: slope = sqrt(nx² + ny²) / nz
+    # Atenció: això és magnitud del gradient, equivalent a tan(angle)
+    triangle_slopes = np.sqrt(normals[:, 0]**2 + normals[:, 1]**2) / (normals[:, 2] + 1e-10)
+    
+    # Assignar pendent del triangle a cada píxel
+    slopes_flat = np.full(len(query_xy), np.nan)
+    valid = simplex_ids != -1
+    slopes_flat[valid] = triangle_slopes[simplex_ids[valid]]
+    
+    return slopes_flat.reshape(rows, cols)
 
 
 def plot_comparison_colormaps(h_grid_real, h_grid_tin, slope_real, slope_tin, title_prefix, filename):
@@ -154,21 +201,28 @@ if __name__ == "__main__":
     
     print(f"\nGrid: {rows}x{cols} punts, spacing={spacing}m")
     
-    # --- MODEL 1: Classes.py (error d'alçada) ---
-    print("\n>> Executant Classes.py (criteri: alçada)...")
+    # --- MODEL 1: original.py (error d'alçada) ---
+    print("\n>> Executant original.py (criteri: alçada)...")
     t0 = time.perf_counter()
-    converter_h = GridToTinConverter(step=STEP, control_mode='POINT_COUNT', target_point_count=TARGET_POINTS)
+    converter_h = GridToTinConverter(step=STEP, pixel_size=PIXEL_SIZE, control_mode='POINT_COUNT', target_point_count=TARGET_POINTS)
     converter_h.fit(FILENAME)
     t1 = time.perf_counter()
     print(f"   Temps: {t1 - t0:.2f}s, Punts: {len(converter_h.final_points_3d)}")
     
+    # DEBUG: Mostrar coordenades
+    print(f"   [DEBUG] Coordenades original.py:")
+    print(f"     X range: {converter_h.final_points_3d[:, 0].min():.2f} - {converter_h.final_points_3d[:, 0].max():.2f}")
+    print(f"     Y range: {converter_h.final_points_3d[:, 1].min():.2f} - {converter_h.final_points_3d[:, 1].max():.2f}")
+    print(f"     Z range: {converter_h.final_points_3d[:, 2].min():.2f} - {converter_h.final_points_3d[:, 2].max():.2f}")
+    
     # Interpolar alçades del TIN
-    h_tin_classes = interpolate_tin_heights(
+    h_tin_original = interpolate_tin_heights(
         converter_h.tin, 
         [p[2] for p in converter_h.final_points_3d],  # Z values
         rows, cols, STEP, PIXEL_SIZE
     )
-    slope_tin_classes = calculate_slope_from_heights(h_tin_classes, spacing)
+    # Per original.py calculem pendent del grid interpolat (com sempre)
+    slope_tin_original = calculate_slope_from_heights(h_tin_original, spacing)
     
     # --- MODEL 2: Pendent6.py (error angular) ---
     print("\n>> Executant Pendent6.py (criteri: angle)...")
@@ -178,20 +232,31 @@ if __name__ == "__main__":
     t1 = time.perf_counter()
     print(f"   Temps: {t1 - t0:.2f}s, Punts: {len(converter_a.tin.points)}")
     
+    # DEBUG: Mostrar coordenades
+    print(f"   [DEBUG] Coordenades pendent6.py:")
+    print(f"     X range: {converter_a.tin.points[:, 0].min():.2f} - {converter_a.tin.points[:, 0].max():.2f}")
+    print(f"     Y range: {converter_a.tin.points[:, 1].min():.2f} - {converter_a.tin.points[:, 1].max():.2f}")
+    print(f"     Z range: {min(converter_a.tin_z_values):.2f} - {max(converter_a.tin_z_values):.2f}")
+    
     # Interpolar alçades del TIN
     h_tin_pendent = interpolate_tin_heights(
         converter_a.tin,
         converter_a.tin_z_values,
         rows, cols, STEP, PIXEL_SIZE
     )
-    slope_tin_pendent = calculate_slope_from_heights(h_tin_pendent, spacing)
+    # Per pendent6.py calculem pendent DIRECTAMENT de les normals del TIN
+    slope_tin_pendent = calculate_slope_from_tin_normals(
+        converter_a.tin,
+        converter_a.tin_z_values,
+        rows, cols, STEP, PIXEL_SIZE
+    )
     
     # --- GENERAR COLORMAPS ---
     print("\n>> Generant colormaps...")
     
-    diff_h_classes, diff_s_classes = plot_comparison_colormaps(
-        h_grid_real, h_tin_classes, slope_real, slope_tin_classes,
-        "Classes.py (Alçada)", "colormap_classes.png"
+    diff_h_original, diff_s_original = plot_comparison_colormaps(
+        h_grid_real, h_tin_original, slope_real, slope_tin_original,
+        "original.py (Alçada)", "colormap_original.png"
     )
     
     diff_h_pendent, diff_s_pendent = plot_comparison_colormaps(
@@ -203,14 +268,14 @@ if __name__ == "__main__":
     print("\n>> Generant comparació directa...")
     
     fig, axes = plt.subplots(2, 2, figsize=(14, 12))
-    fig.suptitle(f"Comparació Directa: Classes vs Pendent6 ({TARGET_POINTS} punts)", fontsize=14)
+    fig.suptitle(f"Comparació Directa: original vs Pendent6 ({TARGET_POINTS} punts)", fontsize=14)
     
-    # Diferència alçades - Classes
-    max_h = max(np.nanmax(np.abs(diff_h_classes)), np.nanmax(np.abs(diff_h_pendent)))
+    # Diferència alçades - original
+    max_h = max(np.nanmax(np.abs(diff_h_original)), np.nanmax(np.abs(diff_h_pendent)))
     norm_h = TwoSlopeNorm(vmin=-max_h, vcenter=0, vmax=max_h)
     
-    im1 = axes[0, 0].imshow(diff_h_classes, cmap='RdBu_r', norm=norm_h, origin='lower')
-    axes[0, 0].set_title(f'Classes.py - Error Alçada\nRMSE: {np.sqrt(np.nanmean(diff_h_classes**2)):.2f} m')
+    im1 = axes[0, 0].imshow(diff_h_original, cmap='RdBu_r', norm=norm_h, origin='lower')
+    axes[0, 0].set_title(f'original.py - Error Alçada\nRMSE: {np.sqrt(np.nanmean(diff_h_original**2)):.2f} m')
     plt.colorbar(im1, ax=axes[0, 0], label='Diferència (m)')
     
     im2 = axes[0, 1].imshow(diff_h_pendent, cmap='RdBu_r', norm=norm_h, origin='lower')
@@ -218,11 +283,11 @@ if __name__ == "__main__":
     plt.colorbar(im2, ax=axes[0, 1], label='Diferència (m)')
     
     # Diferència pendents
-    max_s = max(np.nanmax(np.abs(diff_s_classes)), np.nanmax(np.abs(diff_s_pendent)))
+    max_s = max(np.nanmax(np.abs(diff_s_original)), np.nanmax(np.abs(diff_s_pendent)))
     norm_s = TwoSlopeNorm(vmin=-max_s, vcenter=0, vmax=max_s)
     
-    im3 = axes[1, 0].imshow(diff_s_classes, cmap='RdBu_r', norm=norm_s, origin='lower')
-    axes[1, 0].set_title(f'Classes.py - Error Pendent\nRMSE: {np.sqrt(np.nanmean(diff_s_classes**2)):.4f}')
+    im3 = axes[1, 0].imshow(diff_s_original, cmap='RdBu_r', norm=norm_s, origin='lower')
+    axes[1, 0].set_title(f'original.py - Error Pendent\nRMSE: {np.sqrt(np.nanmean(diff_s_original**2)):.4f}')
     plt.colorbar(im3, ax=axes[1, 0], label='Diferència pendent')
     
     im4 = axes[1, 1].imshow(diff_s_pendent, cmap='RdBu_r', norm=norm_s, origin='lower')
@@ -237,14 +302,14 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("RESUM COMPARATIU")
     print("=" * 60)
-    print(f"{'Mètrica':<25} | {'Classes.py':<15} | {'Pendent6.py':<15}")
+    print(f"{'Mètrica':<25} | {'original.py':<15} | {'Pendent6.py':<15}")
     print("-" * 60)
-    print(f"{'RMSE Alçada (m)':<25} | {np.sqrt(np.nanmean(diff_h_classes**2)):<15.4f} | {np.sqrt(np.nanmean(diff_h_pendent**2)):<15.4f}")
-    print(f"{'MAE Alçada (m)':<25} | {np.nanmean(np.abs(diff_h_classes)):<15.4f} | {np.nanmean(np.abs(diff_h_pendent)):<15.4f}")
-    print(f"{'Max Alçada (m)':<25} | {np.nanmax(np.abs(diff_h_classes)):<15.4f} | {np.nanmax(np.abs(diff_h_pendent)):<15.4f}")
-    print(f"{'RMSE Pendent':<25} | {np.sqrt(np.nanmean(diff_s_classes**2)):<15.6f} | {np.sqrt(np.nanmean(diff_s_pendent**2)):<15.6f}")
-    print(f"{'MAE Pendent':<25} | {np.nanmean(np.abs(diff_s_classes)):<15.6f} | {np.nanmean(np.abs(diff_s_pendent)):<15.6f}")
-    print(f"{'Max Pendent':<25} | {np.nanmax(np.abs(diff_s_classes)):<15.6f} | {np.nanmax(np.abs(diff_s_pendent)):<15.6f}")
+    print(f"{'RMSE Alçada (m)':<25} | {np.sqrt(np.nanmean(diff_h_original**2)):<15.4f} | {np.sqrt(np.nanmean(diff_h_pendent**2)):<15.4f}")
+    print(f"{'MAE Alçada (m)':<25} | {np.nanmean(np.abs(diff_h_original)):<15.4f} | {np.nanmean(np.abs(diff_h_pendent)):<15.4f}")
+    print(f"{'Max Alçada (m)':<25} | {np.nanmax(np.abs(diff_h_original)):<15.4f} | {np.nanmax(np.abs(diff_h_pendent)):<15.4f}")
+    print(f"{'RMSE Pendent':<25} | {np.sqrt(np.nanmean(diff_s_original**2)):<15.6f} | {np.sqrt(np.nanmean(diff_s_pendent**2)):<15.6f}")
+    print(f"{'MAE Pendent':<25} | {np.nanmean(np.abs(diff_s_original)):<15.6f} | {np.nanmean(np.abs(diff_s_pendent)):<15.6f}")
+    print(f"{'Max Pendent':<25} | {np.nanmax(np.abs(diff_s_original)):<15.6f} | {np.nanmax(np.abs(diff_s_pendent)):<15.6f}")
     print("=" * 60)
     
     plt.show()

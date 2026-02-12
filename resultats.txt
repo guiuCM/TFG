@@ -1,0 +1,60 @@
+alçada:
+
+Iter. 500: Punts TIN = 503, Error Màx. Actual = 45.68
+Iter. 1000: Punts TIN = 1003, Error Màx. Actual = 32.27
+Iter. 2000: Punts TIN = 2003, Error Màx. Actual = 22.48
+Iter. 3000: Punts TIN = 3003, Error Màx. Actual = 18.36
+Iter. 4000: Punts TIN = 4003, Error Màx. Actual = 15.54
+Iter. 5000: Punts TIN = 5003, Error Màx. Actual = 13.69
+Iter. 6000: Punts TIN = 6003, Error Màx. Actual = 33.96 (flip)
+Iter. 7000: Punts TIN = 7003, Error Màx. Actual = 14.88 (flip)
+Iter. 8000: Punts TIN = 8003, Error Màx. Actual = 10.47
+Iter. 9000: Punts TIN = 9003, Error Màx. Actual = 10.55  (flip)
+Iter. 9990: Punts TIN = 9993, Error Màx. Actual = 9.21
+
+
+pendent:
+
+Iteració 540: max_error = 138.414935 graus, punts totals = 544
+Iteració 1000: max_error = 132.000655 graus, punts totals = 1004
+Iteració 2000: max_error = 152.187795 graus, punts totals = 2004 (flip)
+Iteració 3000: max_error = 105.030483 graus, punts totals = 3004
+Iteració 4000: max_error = 101.766576 graus, punts totals = 4004
+Iteració 5000: max_error = 108.097597 graus, punts totals = 5004 (flip)
+Iteració 6000: max_error = 93.040833 graus, punts totals = 6004
+Iteració 7000: max_error = 102.494299 graus, punts totals = 7004 (flip)
+Iteració 8000: max_error = 86.656569 graus, punts totals = 8004
+Iteració 9000: max_error = 102.673042 graus, punts totals = 9004 (flip)
+Iteració 9995: max_error = 81.890748 graus, punts totals = 9999
+
+============================================================
+RESUM COMPARATIU
+============================================================
+Mètrica                   | original.py     | Pendent6.py    
+------------------------------------------------------------
+RMSE Alçada (m)           | 192.1160        | 17.7123        
+MAE Alçada (m)            | 159.4109        | 12.8426        
+Max Alçada (m)            | 531.7687        | 77.8071        
+RMSE Pendent              | 1.474825        | 0.531868       
+MAE Pendent               | 0.974949        | 0.331323       
+Max Pendent               | 24.666191       | 17.597155      
+============================================================
+
+
+============================================================
+ESTADÍSTIQUES DELS BOXPLOTS
+============================================================
+MÈTRICA              | Mitjana (mín-màx)         | Std (mín-màx)            
+------------------------------------------------------------
+original (Alçada)    | 0.923 (0.003-8.450) | 0.208 (0.000-3.977)
+Pendent5 (Angle)     | 1.981 (0.081-21.238) | 0.540 (0.000-9.058)
+============================================================
+
+
+pendent ara: (sempla una mica millor pel clip)
+
+# Limitar dot_product a [-1, 1] per evitar errors numèrics
+dot_product = np.clip(dot_product, -1.0, 1.0)
+
+Iteració 500: max_error = 111.062178 graus, punts totals = 504
+Iteració 1000: max_error = 127.872576 graus, punts totals = 1004

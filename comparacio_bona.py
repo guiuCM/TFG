@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from classes import GridToTinConverter
+from original import GridToTinConverter
 from pendent6 import GridToTinIncremental
 import time
 
@@ -47,8 +47,8 @@ def calculate_stats_for_model(model_tin, h_grid, rows, cols, step, pixel_size):
 
 if __name__ == "__main__":
     
-    print("COMPARACIÓ CLASSES.PY vs PENDENT.PY\n")
-    # classes.py
+    print("COMPARACIÓ original.PY vs PENDENT.PY\n")
+    # original.py
     t0 = time.perf_counter()
     converter_h = GridToTinConverter(step=STEP, control_mode='POINT_COUNT', target_point_count=TARGET_POINTS)
     converter_h.fit(FILENAME)
@@ -76,11 +76,11 @@ if __name__ == "__main__":
     #boxplots
     print("\n>> Generant boxplots...")
     fig = plt.figure(figsize=(14, 6))
-    plt.suptitle(f"Comparació Classes.py vs Pendent6.py ({TARGET_POINTS} punts, step={STEP})", fontsize=14)
+    plt.suptitle(f"Comparació original.py vs Pendent6.py ({TARGET_POINTS} punts, step={STEP})", fontsize=14)
     
     # Mitjana Pendent
     ax1 = plt.subplot(1, 2, 1)
-    bp1 = ax1.boxplot([means_h, means_a], labels=['Classes (Alçada)', 'Pendent6 (Angle)'], patch_artist=True)
+    bp1 = ax1.boxplot([means_h, means_a], labels=['original (Alçada)', 'Pendent6 (Angle)'], patch_artist=True)
     colors = ['lightblue', 'lightcoral']
     for patch, color in zip(bp1['boxes'], colors):
         patch.set_facecolor(color)
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     
     # Desviació Estàndard
     ax2 = plt.subplot(1, 2, 2)
-    bp2 = ax2.boxplot([stds_h, stds_a], labels=['Classes (Alçada)', 'Pendent6 (Angle)'], patch_artist=True)
+    bp2 = ax2.boxplot([stds_h, stds_a], labels=['original (Alçada)', 'Pendent6 (Angle)'], patch_artist=True)
     for patch, color in zip(bp2['boxes'], colors):
         patch.set_facecolor(color)
     ax2.scatter([1] * len(stds_h), stds_h, alpha=0.3, s=20, color='blue')
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     print("="*60)
     print(f"{'MÈTRICA':<20} | {'Mitjana (mín-màx)':<25} | {'Std (mín-màx)':<25}")
     print("-"*60)
-    print(f"{'Classes (Alçada)':<20} | {np.mean(means_h):.3f} ({np.min(means_h):.3f}-{np.max(means_h):.3f}) | {np.mean(stds_h):.3f} ({np.min(stds_h):.3f}-{np.max(stds_h):.3f})")
+    print(f"{'original (Alçada)':<20} | {np.mean(means_h):.3f} ({np.min(means_h):.3f}-{np.max(means_h):.3f}) | {np.mean(stds_h):.3f} ({np.min(stds_h):.3f}-{np.max(stds_h):.3f})")
     print(f"{'Pendent5 (Angle)':<20} | {np.mean(means_a):.3f} ({np.min(means_a):.3f}-{np.max(means_a):.3f}) | {np.mean(stds_a):.3f} ({np.min(stds_a):.3f}-{np.max(stds_a):.3f})")
     print("="*60)
     

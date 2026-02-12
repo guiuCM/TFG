@@ -7,10 +7,11 @@ import time
 
 class GridToTinConverter:
     
-    def __init__(self, step=25, control_mode='POINT_COUNT', 
+    def __init__(self, step=25, pixel_size=2.0, control_mode='POINT_COUNT', 
                  target_error_percentage=0.5, target_point_count=500):
         
         self.step = step
+        self.pixel_size = pixel_size
         self.control_mode = control_mode
         self.target_error_percentage = target_error_percentage
         self.target_point_count = target_point_count
@@ -37,11 +38,19 @@ class GridToTinConverter:
         #print(f"Elevació Mín: {h.min()}, Elevació Màx: {h.max()}")
         self.elevation_range = h.max() - h.min()
         
+        # Submostreig igual que pendent6.py
         h_sampled = h[::self.step, ::self.step]
         self.rows, self.cols = h_sampled.shape
-        x = np.linspace(0, h.shape[1], self.cols)
-        y = np.linspace(0, h.shape[0], self.rows)
-        xx, yy = np.meshgrid(x, y)
+        
+        # Sistema de coordenades igual que pendent6.py
+        spacing = self.step * self.pixel_size
+        r_indices = np.arange(self.rows)
+        c_indices = np.arange(self.cols)
+        rr, cc = np.meshgrid(r_indices, c_indices, indexing='ij')
+        
+        # x = col * spacing, y = row * spacing
+        xx = cc * spacing
+        yy = rr * spacing
         
         self.all_points_3d = np.vstack([xx.ravel(), yy.ravel(), h_sampled.ravel()]).T
         self.num_total_points = self.all_points_3d.shape[0]
@@ -129,6 +138,7 @@ if __name__ == "__main__":
 
     # tin_builder_points = GridToTinConverter(
     #     step=20,  # Un 'step' més baix dona més punts per escollir
+    #     pixel_size=2.0,
     #     control_mode='POINT_COUNT',
     #     target_point_count=700  # Volem un TIN amb 700 punts
     # )
@@ -136,7 +146,8 @@ if __name__ == "__main__":
     # tin_builder_points.plot()
 
     tin_builder_error = GridToTinConverter(
-        step=20,
+        step=1,
+        pixel_size=2.0,
         control_mode='POINT_COUNT',
         target_point_count=2000  # Volem un TIN amb 2000 punts
     )
