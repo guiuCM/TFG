@@ -10,6 +10,7 @@ from matplotlib.animation import FuncAnimation, FFMpegWriter
 from pendent6 import GridToTinIncremental
 from original import GridToTinConverter
 import os
+from PIL import Image
 
 def create_video_pendent6(npy_file, target_points=500, output_file='video_pendent6.mp4'):
     """
@@ -111,11 +112,11 @@ def create_video_original(npy_file, target_points=500, output_file='video_origin
 
 def create_side_by_side_video(npy_file, target_points=500, output_file='video_comparison.mp4'):
     """
-    Genera vídeo amb ambdós algoritmes side-by-side
+    Genera vídeo MP4 amb ambdós algoritmes side-by-side
     """
     print(f"Generant vídeo comparatiu amb {target_points} punts...")
     
-    # Generar snapshots per ambdós
+    # Generar snapshots per ambdós (cada iteració!)
     snapshot_dir_pendent = 'temp_snapshots_pendent6_comp'
     snapshot_dir_original = 'temp_snapshots_original_comp'
     
@@ -124,58 +125,84 @@ def create_side_by_side_video(npy_file, target_points=500, output_file='video_co
     
     print("  Executant pendent6.py...")
     conv_p = GridToTinIncremental(step=1, pixel_size=2.0, target_point_count=target_points)
-    conv_p.fit(npy_file, snapshot_dir=snapshot_dir_pendent, snapshot_interval=10)
+    conv_p.fit(npy_file, snapshot_dir=snapshot_dir_pendent, snapshot_interval=1)  # CADA iteració
     
     print("  Executant original.py...")
     conv_o = GridToTinConverter(step=1, pixel_size=2.0, target_point_count=target_points)
-    conv_o.fit(npy_file, snapshot_dir=snapshot_dir_original, snapshot_interval=10)
+    conv_o.fit(npy_file, snapshot_dir=snapshot_dir_original, snapshot_interval=1)  # CADA iteració
     
     # Llegir snapshots
     snapshots_p = sorted([f for f in os.listdir(snapshot_dir_pendent) if f.endswith('.png')])
     snapshots_o = sorted([f for f in os.listdir(snapshot_dir_original) if f.endswith('.png')])
     
+    print(f"  Snapshots pendent6: {len(snapshots_p)}")
+    print(f"  Snapshots original: {len(snapshots_o)}")
+    
     # Utilitzar el mínim nombre de frames
     n_frames = min(len(snapshots_p), len(snapshots_o))
     
-    # Crear vídeo comparatiu
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
-    fig.suptitle(f'Comparació: Angular Error vs Height Error ({target_points} punts)', 
-                 fontsize=18, fontweight='bold')
+    print(f"  Generant {n_frames} frames combinats...")
     
-    def update(frame_num):
-        ax1.clear()
-        ax2.clear()
+    # Crear frames combinats amb PIL
+    combined_dir = 'temp_combined_frames'
+    os.makedirs(combined_dir, exist_ok=True)
+    
+    for i in range(n_frames):
+        # Carregar imatges
+        img_p = Image.open(os.path.join(snapshot_dir_pendent, snapshots_p[i]))
+        img_o = Image.open(os.path.join(snapshot_dir_original, snapshots_o[i]))
         
-        # Pendent6
-        img_p = plt.imread(os.path.join(snapshot_dir_pendent, snapshots_p[frame_num]))
-        ax1.imshow(img_p)
-        ax1.axis('off')
-        ax1.set_title('pendent6.py (Angular Error)', fontsize=14, fontweight='bold')
+        # Combinar side-by-side
+        width = img_p.width + img_o.width
+        height = max(img_p.height, img_o.height)
+        combined = Image.new('RGB', (width, height), (255, 255, 255))
+        combined.paste(img_p, (0, 0))
+        combined.paste(img_o, (img_p.width, 0))
         
-        # Original
-        img_o = plt.imread(os.path.join(snapshot_dir_original, snapshots_o[frame_num]))
-        ax2.imshow(img_o)
-        ax2.axis('off')
-        ax2.set_title('original.py (Height Error)', fontsize=14, fontweight='bold')
+        # Guardar frame combinat
+        combined.save(os.path.join(combined_dir, f'combined_{i:04d}.png'))
         
-        return [ax1, ax2]
+        if (i + 1) % 50 == 0:
+            print(f"    Processat frame {i+1}/{n_frames}")
     
-    anim = FuncAnimation(fig, update, frames=n_frames, interval=200, blit=True)
+    # Crear vídeo MP4 amb ffmpeg
+    print(f"  Generant vídeo MP4...")
+    import subprocess
     
-    # Guardar
-    writer = FFMpegWriter(fps=5, bitrate=3000)
-    anim.save(output_file, writer=writer)
-    plt.close()
+    ffmpeg_cmd = [
+        'ffmpeg', '-y',
+        '-framerate', '10',  # 10 fps
+        '-i', os.path.join(combined_dir, 'combined_%04d.png'),
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        '-crf', '23',
+        output_file
+    ]
     
-    print(f"✓ Vídeo comparatiu guardat: {output_file}")
+    try:
+        subprocess.run(ffmpeg_cmd, check=True, capture_output=True)
+        print(f"✓ Vídeo MP4 guardat: {output_file}")
+    except subprocess.CalledProcessError as e:
+        print(f"✗ Error generant MP4 amb ffmpeg:")
+        print(f"  {e.stderr.decode()}")
+        print(f"  Instal·la ffmpeg: sudo apt-get install ffmpeg")
+        return
+    except FileNotFoundError:
+        print(f"✗ ffmpeg no trobat. Instal·la'l: sudo apt-get install ffmpeg")
+        return
     
     # Netejar
+    print("  Netejant fitxers temporals...")
     for f in snapshots_p:
         os.remove(os.path.join(snapshot_dir_pendent, f))
     for f in snapshots_o:
         os.remove(os.path.join(snapshot_dir_original, f))
+    for f in os.listdir(combined_dir):
+        os.remove(os.path.join(combined_dir, f))
+    
     os.rmdir(snapshot_dir_pendent)
     os.rmdir(snapshot_dir_original)
+    os.rmdir(combined_dir)
 
 
 if __name__ == '__main__':

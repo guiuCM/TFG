@@ -191,34 +191,36 @@ class GridToTinIncremental:
         return np.sqrt(slope_x**2 + slope_y**2)
 
 
-    def _save_snapshot(self, iteration, last_point_xy, folder):
+    def _save_snapshot(self, iteration, last_point_xy, folder, vmin=2083, vmax=2902):
 
         if len(self.tin.simplices) == 0:
             return
         fig = plt.figure(figsize=(10, 8))
         ax = plt.gca()
         
-        # Mapcolor amb elevació
+        # Mapcolor amb elevació - ESCALA FIXA
         tpc = ax.tripcolor(self.tin.points[:,0], self.tin.points[:,1], self.tin.simplices, 
-                           np.array(self.tin_z_values), cmap='coolwarm', shading='flat')
+                           np.array(self.tin_z_values), cmap='terrain', shading='flat',
+                           vmin=vmin, vmax=vmax)
         
         ax.triplot(self.tin.points[:,0], self.tin.points[:,1], self.tin.simplices, 
                    'k-', linewidth=0.3, alpha=0.5)
         
         # EMFATITZAR ÚLTIM PUNT
-        ax.scatter(last_point_xy[0], last_point_xy[1], color='red', s=100, edgecolors='white', zorder=10, label='Nou Punt')
+        ax.scatter(last_point_xy[0], last_point_xy[1], color='red', s=80, edgecolors='white', zorder=10, linewidths=2)
         
         plt.colorbar(tpc, label='Elevació (m)')
-        plt.title(f"Iteració {iteration} | Punts: {len(self.tin.points)}")
+        plt.title(f"pendent6.py - Iter {iteration} | Punts: {len(self.tin.points)}", fontweight='bold')
         plt.xlabel('X (m)')
         plt.ylabel('Y (m)')
-        plt.axis('equal')
-        plt.legend()
+        ax.set_xlim(0, 3000)
+        ax.set_ylim(0, 3000)
+        ax.set_aspect('equal', adjustable='box')
         
         # Guardar fitxer
         filename = os.path.join(folder, f"frame_{iteration:04d}.png")
-        plt.savefig(filename, dpi=100)
-        plt.close(fig) #tancar per alliberar memòria
+        plt.savefig(filename, dpi=100, bbox_inches='tight')
+        plt.close(fig)
 
 
     def _save_snapshot_slope(self, iteration, last_point_xy, folder):
@@ -376,10 +378,8 @@ class GridToTinIncremental:
             self.tin_z_values.append(new_z)
             candidate_indices.pop(worst_local_idx)
             
-            if snapshot_dir and (iteration % snapshot_interval == 10):
-                # print(f"iteració {iteration}...")
+            if snapshot_dir and (iteration % snapshot_interval == 0):
                 self._save_snapshot(iteration, new_xy, snapshot_dir)
-                self._save_snapshot_slope(iteration, new_xy, snapshot_dir)
             
         # Comentat temporalment per terreny pla
         # self._filter_erosion(max_len=self.step * self.pixel_size * 15)
@@ -387,7 +387,6 @@ class GridToTinIncremental:
         # Guardar l'última imatge per si iteration % snapshot_interval != 0
         if snapshot_dir and new_xy is not None:
             self._save_snapshot(iteration, new_xy, snapshot_dir)
-            self._save_snapshot_slope(iteration, new_xy, snapshot_dir)
         
         # VERIFICACIÓ: Comprovar si els punts i les Z estan sincronitzats
         print(f"\n[DEBUG] Verificant sincronització punts-Z:")

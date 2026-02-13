@@ -126,34 +126,40 @@ class GridToTinConverter:
         self.tin = Delaunay(self.final_points_3d[:, :2])
         #print(f"TIN final generat amb {len(self.final_points_3d)} vèrtexs.")
 
-    def _save_snapshot(self, snapshot_dir, iteration, S_indices):
-        """Guarda un snapshot del TIN actual"""
+    def _save_snapshot(self, snapshot_dir, iteration, S_indices, vmin=2083, vmax=2902):
+        """Guarda un snapshot del TIN actual amb escala fixa"""
         current_points = self.all_points_3d[S_indices]
         temp_tin = Delaunay(current_points[:, :2])
         z_values = current_points[:, 2]
         
-        fig, ax = plt.subplots(figsize=(10, 10))
+        fig, ax = plt.subplots(figsize=(10, 8))
         
-        # Dibuixar triangles amb color segons elevació
+        # Dibuixar triangles amb color segons elevació - ESCALA FIXA
         tpc = ax.tripcolor(temp_tin.points[:,0], temp_tin.points[:,1], 
                           temp_tin.simplices, z_values, 
-                          cmap='terrain', shading='flat', alpha=0.8)
+                          cmap='terrain', shading='flat',
+                          vmin=vmin, vmax=vmax)
         
         # Dibuixar edges
         ax.triplot(temp_tin.points[:,0], temp_tin.points[:,1], 
-                  temp_tin.simplices, 'k-', linewidth=0.3, alpha=0.6)
+                  temp_tin.simplices, 'k-', linewidth=0.3, alpha=0.5)
         
-        # Dibuixar punts
-        ax.plot(temp_tin.points[:,0], temp_tin.points[:,1], 
-               'ro', markersize=2, alpha=0.7)
+        # Últim punt afegit en vermell
+        if len(S_indices) > 0:
+            last_pt = current_points[-1]
+            ax.scatter(last_pt[0], last_pt[1], color='red', s=80, 
+                      edgecolors='white', zorder=10, linewidths=2)
         
         plt.colorbar(tpc, ax=ax, label='Elevació (m)')
-        ax.set_title(f'original.py - Iteració {iteration} ({len(S_indices)} punts)', 
+        ax.set_title(f'original.py - Iter {iteration} | Punts: {len(S_indices)}', 
                     fontsize=14, fontweight='bold')
-        ax.set_aspect('equal')
-        ax.axis('off')
+        ax.set_xlabel('X (m)')
+        ax.set_ylabel('Y (m)')
+        ax.set_xlim(0, 3000)
+        ax.set_ylim(0, 3000)
+        ax.set_aspect('equal', adjustable='box')
         
-        filename = os.path.join(snapshot_dir, f'snapshot_{iteration:05d}.png')
+        filename = os.path.join(snapshot_dir, f'frame_{iteration:04d}.png')
         plt.savefig(filename, dpi=100, bbox_inches='tight')
         plt.close()
 
