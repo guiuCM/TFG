@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial import Delaunay
 from scipy.interpolate import LinearNDInterpolator
 import time
+import os
 
 
 class GridToTinConverter:
@@ -56,9 +57,12 @@ class GridToTinConverter:
         self.num_total_points = self.all_points_3d.shape[0]
         #print(f"Grid submostrejat a {self.num_total_points} punts (step={self.step}).")
 
-    def fit(self, npy_file_path):
+    def fit(self, npy_file_path, snapshot_dir=None, snapshot_interval=100):
   
         self._load_and_sample_grid(npy_file_path)
+        
+        if snapshot_dir:
+            os.makedirs(snapshot_dir, exist_ok=True)
         
         if self.control_mode == 'ERROR':
             max_error_threshold = (self.target_error_percentage / 100.0) * self.elevation_range
@@ -110,12 +114,48 @@ class GridToTinConverter:
             # Continuar: Afegir el pitjor punt al TIN
             S_indices.append(point_to_add_global_index)
             P_indices.pop(max_err_local_index)
+            
+            # Generar snapshot si cal
+            if snapshot_dir and iteration % snapshot_interval == 0:
+                self._save_snapshot(snapshot_dir, iteration, S_indices)
+            
             iteration += 1
 
 
         self.final_points_3d = self.all_points_3d[S_indices]
         self.tin = Delaunay(self.final_points_3d[:, :2])
         #print(f"TIN final generat amb {len(self.final_points_3d)} vèrtexs.")
+
+    def _save_snapshot(self, snapshot_dir, iteration, S_indices):
+        """Guarda un snapshot del TIN actual"""
+        current_points = self.all_points_3d[S_indices]
+        temp_tin = Delaunay(current_points[:, :2])
+        z_values = current_points[:, 2]
+        
+        fig, ax = plt.subplots(figsize=(10, 10))
+        
+        # Dibuixar triangles amb color segons elevació
+        tpc = ax.tripcolor(temp_tin.points[:,0], temp_tin.points[:,1], 
+                          temp_tin.simplices, z_values, 
+                          cmap='terrain', shading='flat', alpha=0.8)
+        
+        # Dibuixar edges
+        ax.triplot(temp_tin.points[:,0], temp_tin.points[:,1], 
+                  temp_tin.simplices, 'k-', linewidth=0.3, alpha=0.6)
+        
+        # Dibuixar punts
+        ax.plot(temp_tin.points[:,0], temp_tin.points[:,1], 
+               'ro', markersize=2, alpha=0.7)
+        
+        plt.colorbar(tpc, ax=ax, label='Elevació (m)')
+        ax.set_title(f'original.py - Iteració {iteration} ({len(S_indices)} punts)', 
+                    fontsize=14, fontweight='bold')
+        ax.set_aspect('equal')
+        ax.axis('off')
+        
+        filename = os.path.join(snapshot_dir, f'snapshot_{iteration:05d}.png')
+        plt.savefig(filename, dpi=100, bbox_inches='tight')
+        plt.close()
 
     def plot(self):
         if self.tin is None: return
