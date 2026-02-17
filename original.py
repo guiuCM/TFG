@@ -126,6 +126,121 @@ class GridToTinConverter:
         self.tin = Delaunay(self.final_points_3d[:, :2])
         #print(f"TIN final generat amb {len(self.final_points_3d)} vèrtexs.")
 
+    def fit_with_error_snapshots(self, npy_file_path, snapshot_dir='snapshots_error_original', snapshot_interval=5):
+        """
+        Executa l'algoritme i genera snapshots mostrant l'ERROR d'alçada
+        """
+        self._load_and_sample_grid(npy_file_path)
+        
+        os.makedirs(snapshot_dir, exist_ok=True)
+        
+        # Carregar grid original per visualització
+        h_full = np.load(npy_file_path)
+        
+        max_points_threshold = self.target_point_count
+        
+        corner_indices = [0, self.cols - 1, (self.rows - 1) * self.cols, self.rows * self.cols - 1]
+        S_indices = list(set(corner_indices))
+        P_indices = list(set(range(self.num_total_points)) - set(S_indices))
+        
+        iteration = 0
+        spacing = self.step * self.pixel_size
+        
+        while len(S_indices) < max_points_threshold and P_indices:
+            iteration += 1
+            
+            current_S_points_2d = self.all_points_3d[S_indices, :2]
+            current_S_points_z = self.all_points_3d[S_indices, 2]
+            interpolator = LinearNDInterpolator(current_S_points_2d, current_S_points_z)
+            
+            points_to_check_2d = self.all_points_3d[P_indices, :2]
+            interpolated_z = interpolator(points_to_check_2d)
+            
+            actual_z = self.all_points_3d[P_indices, 2]
+            errors = np.nan_to_num(np.abs(actual_z - interpolated_z))
+            
+            max_err_local_index = np.argmax(errors)
+            max_err = errors[max_err_local_index]
+            point_to_add_global_index = P_indices[max_err_local_index]
+            
+            if iteration % 10 == 0:
+                print(f"  Iter {iteration}: Error màx = {max_err:.2f}m")
+            
+            # Generar snapshot d'error
+            if iteration % snapshot_interval == 0:
+                self._save_error_snapshot(snapshot_dir, iteration, S_indices, P_indices, 
+                                         errors, max_err_local_index, spacing)
+            
+            S_indices.append(point_to_add_global_index)
+            P_indices.pop(max_err_local_index)
+        
+        self.final_points_3d = self.all_points_3d[S_indices]
+        self.tin = Delaunay(self.final_points_3d[:, :2])
+        print(f"✓ {iteration} snapshots generats a {snapshot_dir}/")
+    
+    def _save_error_snapshot(self, snapshot_dir, iteration, S_indices, P_indices, 
+                            errors, max_err_idx, spacing):
+        """Guarda snapshot mostrant l'error d'alçada"""
+        fig, ax = plt.subplots(figsize=(12, 10))
+        
+        # Crear mapa d'error (mostrejat cada 5 píxels)
+        sample_step = 5
+        sample_rows = self.rows // sample_step
+        sample_cols = self.cols // sample_step
+        error_grid = np.full((sample_rows, sample_cols), np.nan)
+        
+        for local_idx, global_idx in enumerate(P_indices):
+            r = global_idx // self.cols
+            c = global_idx % self.cols
+            sr = r // sample_step
+            sc = c // sample_step
+            if 0 <= sr < sample_rows and 0 <= sc < sample_cols:
+                if np.isnan(error_grid[sr, sc]):
+                    error_grid[sr, sc] = errors[local_idx]
+                else:
+                    error_grid[sr, sc] = max(error_grid[sr, sc], errors[local_idx])
+        
+        # Mostrar error com a heatmap
+        im = ax.imshow(error_grid, extent=[0, self.cols*spacing, 0, self.rows*spacing], 
+                       origin='lower', cmap='hot_r', vmin=0, vmax=400, 
+                       interpolation='nearest', alpha=0.9)
+        
+        # Dibuixar TIN actual
+        current_points = self.all_points_3d[S_indices]
+        tin = Delaunay(current_points[:, :2])
+        ax.triplot(tin.points[:,0], tin.points[:,1], tin.simplices, 
+                   color='cyan', linewidth=0.5, alpha=0.6)
+        
+        # Marcar punts TIN
+        ax.scatter(tin.points[:,0], tin.points[:,1], c='white', s=15, 
+                   edgecolors='black', linewidths=0.5, zorder=5, alpha=0.8)
+        
+        # Marcar últim punt afegit
+        if len(S_indices) > 0:
+            last_pt = current_points[-1]
+            ax.scatter(last_pt[0], last_pt[1], c='lime', s=100, 
+                       edgecolors='white', linewidths=2, zorder=10, marker='*')
+        
+        # Marcar punt amb màxim error
+        if max_err_idx < len(P_indices):
+            next_pt_idx = P_indices[max_err_idx]
+            next_pt = self.all_points_3d[next_pt_idx]
+            ax.scatter(next_pt[0], next_pt[1], c='red', s=100, 
+                       edgecolors='yellow', linewidths=2, zorder=10, marker='X')
+        
+        plt.colorbar(im, ax=ax, label='Error alçada (m)')
+        ax.set_title(f"original.py - ERROR D'ALÇADA | Iter {iteration} | Punts: {len(S_indices)}", 
+                     fontsize=14, fontweight='bold')
+        ax.set_xlabel('X (m)')
+        ax.set_ylabel('Y (m)')
+        ax.set_xlim(0, self.cols*spacing)
+        ax.set_ylim(0, self.rows*spacing)
+        ax.set_aspect('equal', adjustable='box')
+        
+        filename = os.path.join(snapshot_dir, f'frame_{iteration:04d}.png')
+        plt.savefig(filename, dpi=100, bbox_inches='tight')
+        plt.close()
+
     def _save_snapshot(self, snapshot_dir, iteration, S_indices, vmin=2083, vmax=2902):
         """Guarda un snapshot del TIN actual amb escala fixa"""
         current_points = self.all_points_3d[S_indices]

@@ -397,6 +397,138 @@ class GridToTinIncremental:
             
         return self.tin.points, self.tin.simplices
 
+    def fit_with_error_snapshots(self, npy_file_path, snapshot_dir='snapshots_error_pendent', snapshot_interval=5):
+        """
+        Executa l'algoritme i genera snapshots mostrant l'ERROR ANGULAR
+        """
+        if not self._load_data(npy_file_path): 
+            return None, None
+        
+        os.makedirs(snapshot_dir, exist_ok=True)
+        
+        total_points = self.rows * self.cols
+        corner_indices = [0, self.cols-1, (self.rows-1)*self.cols, total_points-1]
+        candidate_indices = list(set(range(total_points)) - set(corner_indices))
+
+        initial_points_xy = []
+        self.tin_z_values = []
+        for idx in corner_indices:
+            xy, z = self._get_coords_from_index(idx)
+            initial_points_xy.append(xy)
+            self.tin_z_values.append(z)
+
+        # Afegir 5è punt (màxim residual)
+        corner_rows, corner_cols = np.divmod(corner_indices, self.cols)
+        corner_z = self.h_grid[corner_rows, corner_cols]
+        
+        A = np.c_[corner_cols, corner_rows, np.ones(len(corner_indices))]
+        coef, _, _, _ = np.linalg.lstsq(A, corner_z, rcond=None)
+        a, b, c = coef
+        
+        rows_grid, cols_grid = np.indices((self.rows, self.cols))
+        z_pred = a * cols_grid + b * rows_grid + c
+        residual = np.abs(self.h_grid - z_pred).ravel()
+        residual[corner_indices] = -np.inf
+        
+        max_err_idx = int(np.argmax(residual))
+        new_xy, new_z = self._get_coords_from_index(max_err_idx)
+        initial_points_xy.append(new_xy)
+        self.tin_z_values.append(new_z)
+        candidate_indices.remove(max_err_idx)
+        
+        self.tin = Delaunay(np.array(initial_points_xy), incremental=True)
+        
+        iteration = 0
+        spacing = self.step * self.pixel_size
+        
+        while len(self.tin.points) < self.target_point_count and len(candidate_indices) > 0:
+            iteration += 1
+            
+            errors = self._calculate_angular_error(candidate_indices)
+            
+            worst_local_idx = np.argmax(errors)
+            worst_global_idx = candidate_indices[worst_local_idx]
+            max_error = errors[worst_local_idx]
+            
+            if iteration % 10 == 0:
+                print(f"  Iter {iteration}: Error màx = {max_error:.2f}°")
+            
+            # Generar snapshot d'error
+            if iteration % snapshot_interval == 0:
+                self._save_error_snapshot(snapshot_dir, iteration, candidate_indices, 
+                                         errors, worst_local_idx, spacing)
+            
+            new_xy, new_z = self._get_coords_from_index(worst_global_idx)
+            self.tin.add_points([new_xy])
+            self.tin_z_values.append(new_z)
+            candidate_indices.pop(worst_local_idx)
+        
+        print(f"✓ {iteration} snapshots generats a {snapshot_dir}/")
+        return self.tin.points, self.tin.simplices
+    
+    def _save_error_snapshot(self, snapshot_dir, iteration, candidate_indices, 
+                            errors, max_err_idx, spacing):
+        """Guarda snapshot mostrant l'error angular"""
+        fig, ax = plt.subplots(figsize=(12, 10))
+        
+        # Crear mapa d'error angular (mostrejat cada 5 píxels)
+        sample_step = 5
+        sample_rows = self.rows // sample_step
+        sample_cols = self.cols // sample_step
+        error_grid = np.full((sample_rows, sample_cols), np.nan)
+        
+        for local_idx, global_idx in enumerate(candidate_indices):
+            r = global_idx // self.cols
+            c = global_idx % self.cols
+            sr = r // sample_step
+            sc = c // sample_step
+            if 0 <= sr < sample_rows and 0 <= sc < sample_cols:
+                if np.isnan(error_grid[sr, sc]):
+                    error_grid[sr, sc] = errors[local_idx]
+                else:
+                    error_grid[sr, sc] = max(error_grid[sr, sc], errors[local_idx])
+        
+        # Mostrar error com a heatmap
+        im = ax.imshow(error_grid, extent=[0, self.cols*spacing, 0, self.rows*spacing], 
+                       origin='lower', cmap='hot_r', vmin=0, vmax=180, 
+                       interpolation='nearest', alpha=0.9)
+        
+        # Dibuixar TIN actual
+        ax.triplot(self.tin.points[:,0], self.tin.points[:,1], self.tin.simplices, 
+                   color='cyan', linewidth=0.5, alpha=0.6)
+        
+        # Marcar punts TIN
+        ax.scatter(self.tin.points[:,0], self.tin.points[:,1], c='white', s=15, 
+                   edgecolors='black', linewidths=0.5, zorder=5, alpha=0.8)
+        
+        # Marcar últim punt afegit
+        if len(self.tin.points) > 0:
+            last_pt = self.tin.points[-1]
+            ax.scatter(last_pt[0], last_pt[1], c='lime', s=100, 
+                       edgecolors='white', linewidths=2, zorder=10, marker='*')
+        
+        # Marcar punt amb màxim error
+        if max_err_idx < len(candidate_indices):
+            next_pt_idx = candidate_indices[max_err_idx]
+            r = next_pt_idx // self.cols
+            c = next_pt_idx % self.cols
+            next_pt = np.array([c * spacing, r * spacing])
+            ax.scatter(next_pt[0], next_pt[1], c='red', s=100, 
+                       edgecolors='yellow', linewidths=2, zorder=10, marker='X')
+        
+        plt.colorbar(im, ax=ax, label='Error angular (graus)')
+        ax.set_title(f"pendent6.py - ERROR ANGULAR | Iter {iteration} | Punts: {len(self.tin.points)}", 
+                     fontsize=14, fontweight='bold')
+        ax.set_xlabel('X (m)')
+        ax.set_ylabel('Y (m)')
+        ax.set_xlim(0, self.cols*spacing)
+        ax.set_ylim(0, self.rows*spacing)
+        ax.set_aspect('equal', adjustable='box')
+        
+        filename = os.path.join(snapshot_dir, f'frame_{iteration:04d}.png')
+        plt.savefig(filename, dpi=100, bbox_inches='tight')
+        plt.close()
+
 
     #Va dir en Rodrigo que millor no, per problemes de borrar massa triangles
     def _filter_erosion(self, max_len):
