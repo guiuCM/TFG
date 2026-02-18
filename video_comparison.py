@@ -207,7 +207,7 @@ def create_side_by_side_video(npy_file, target_points=500, output_file='video_co
 
 if __name__ == '__main__':
     NPY_FILE = 'bassiero.npy'
-    TARGET_POINTS = 2000
+    TARGET_POINTS = 500
     
     print("="*70)
     print("GENERACIÓ DE VÍDEOS COMPARATIUS")

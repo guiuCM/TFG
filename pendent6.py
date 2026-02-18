@@ -96,6 +96,62 @@ class GridToTinIncremental:
         angles_deg = np.degrees(angles_rad)
         
         return angles_deg
+    
+    def _calculate_triangle_areas(self):
+        """
+        Calcula l'àrea de tots els triangles actuals del TIN
+        Fórmula Shoelace: Area = 0.5 * |x1(y2-y3) + x2(y3-y1) + x3(y1-y2)|
+        """
+        points = self.tin.points
+        simplices = self.tin.simplices
+        
+        # Coordenades dels 3 vèrtexs per a cada triangle: [N_triangles, 3, 2]
+        tri_coords = points[simplices]
+        
+        x = tri_coords[:, :, 0]
+        y = tri_coords[:, :, 1]
+        
+        area = 0.5 * np.abs(
+            x[:,0]*(y[:,1] - y[:,2]) + 
+            x[:,1]*(y[:,2] - y[:,0]) + 
+            x[:,2]*(y[:,0] - y[:,1])
+        )
+        return area
+    
+    def _calculate_weighted_angular_error(self, candidate_indices):
+        """
+        Calcula l'error angular ponderat per l'àrea del triangle.
+        Això evita la concentració de punts en zones petites amb errors grans.
+        
+        Score = angular_error * sqrt(triangle_area)
+        
+        Usem sqrt(area) per equilibrar: penalitzem triangles grans però sense
+        ignorar completament els errors en triangles mitjans.
+        """
+        # 1. Error angular pur
+        angular_errors = self._calculate_angular_error(candidate_indices)
+        
+        # 2. Trobar a quin triangle pertany cada candidat
+        rows, cols = np.divmod(candidate_indices, self.cols)
+        x = cols * self.step * self.pixel_size
+        y = rows * self.step * self.pixel_size
+        coords = np.column_stack((x, y))
+        
+        simplex_ids = self.tin.find_simplex(coords)
+        
+        # 3. Calcular àrees de tots els triangles
+        all_areas = self._calculate_triangle_areas()
+        
+        # 4. Assignar àrea corresponent a cada candidat
+        candidate_areas = np.zeros(len(candidate_indices))
+        valid_mask = simplex_ids != -1
+        candidate_areas[valid_mask] = all_areas[simplex_ids[valid_mask]]
+        
+        # 5. PONDERACIÓ HÍBRIDA: Error * sqrt(Area)
+        # sqrt(area) és equivalent a ponderar per longitud d'aresta típica
+        weighted_score = angular_errors * np.sqrt(candidate_areas)
+        
+        return weighted_score
 
     def _get_coords_from_index(self, idx_flat):
         # Converteix índex pla a coordenades X,Y i alçada Z
@@ -332,45 +388,20 @@ class GridToTinIncremental:
         while len(self.tin.points) < self.target_point_count and len(candidate_indices) > 0:
             iteration += 1
             
-            # Càlculs d'error (igual que abans)
-            cand_arr = np.array(candidate_indices)
-            r, c = np.divmod(cand_arr, self.cols)
-            # real_slopes = self.slope_grid[r, c]
-            # tin_slopes = self._interpolate_tin_slope_at_indices(cand_arr)
-            # errors = np.nan_to_num(np.abs(real_slopes - tin_slopes))
+            # CÀLCUL D'ERROR PONDERAT PER ÀREA
+            # Això evita concentració en triangles petits amb errors grans
+            weighted_errors = self._calculate_weighted_angular_error(candidate_indices)
             
-            # Calculem directament l'error angular (en graus)
-            errors = self._calculate_angular_error(candidate_indices)
-            
-            worst_local_idx = np.argmax(errors)
+            worst_local_idx = np.argmax(weighted_errors)
             worst_global_idx = candidate_indices[worst_local_idx]
-            max_error = errors[worst_local_idx]
+            max_weighted_error = weighted_errors[worst_local_idx]
             
-            # DEBUG: mostrar errors de tots els candidats per entendre la distribució
-            # if iteration <= 5:
-            #     print(f"\nIteració {iteration}:")
-            #     print(f"  Errors de candidats: min={errors.min():.4f}, max={errors.max():.4f}, mean={errors.mean():.4f}")
-            #     print(f" ALçada dels punts de cada triangle:")
-            #     for tri_idx, simplex in enumerate(self.tin.simplices):
-            #         z_vals = [self.tin_z_values[v_idx] for v_idx in simplex]
-            #         print(f"  Triangle {tri_idx}: z = {z_vals}")
-            #     print(f"  Nombre triangles: {len(self.tin.simplices)}")
-            #     print(f"  Punts TIN: {len(self.tin.points)}")
-            #     # Mostrar punts amb error > 1 grau
-            #     high_error_mask = errors > 1.0
-            #     if np.any(high_error_mask):
-            #         high_error_indices = np.array(candidate_indices)[high_error_mask]
-            #         print(f"  Punts amb error > 1 grau: {high_error_indices[:5]}...")  # Mostrar primers 5
-            #         for idx in high_error_indices[:3]:
-            #             r, c = divmod(idx, self.cols)
-            #             z_val = self.h_grid[r, c]
-            #             print(f"    Punt idx={idx}, pos=({r},{c}), z={z_val:.1f}, error={errors[candidate_indices.index(idx)]:.2f}°")
-            
-            # Imprimir solo cada 10 iteraciones
+            # Per debug: també calculem l'error angular pur
             if iteration % 10 == 0:
-                print(f"Iteració {iteration}: max_error = {max_error:.6f} graus, punts totals = {len(self.tin.points)}")
-            
-            if max_error <= 0.001: break
+                pure_angular = self._calculate_angular_error(candidate_indices)
+                max_pure_error = pure_angular[worst_local_idx]
+                print(f"Iteració {iteration}: weighted_error = {max_weighted_error:.2f}, "
+                      f"angular_error = {max_pure_error:.2f}°, punts = {len(self.tin.points)}")
                 
             new_xy, new_z = self._get_coords_from_index(worst_global_idx)
             
@@ -444,19 +475,23 @@ class GridToTinIncremental:
         while len(self.tin.points) < self.target_point_count and len(candidate_indices) > 0:
             iteration += 1
             
-            errors = self._calculate_angular_error(candidate_indices)
+            # Usar error ponderat per àrea
+            weighted_errors = self._calculate_weighted_angular_error(candidate_indices)
             
-            worst_local_idx = np.argmax(errors)
+            worst_local_idx = np.argmax(weighted_errors)
             worst_global_idx = candidate_indices[worst_local_idx]
-            max_error = errors[worst_local_idx]
+            
+            # Calcular error angular pur per visualització
+            angular_errors = self._calculate_angular_error(candidate_indices)
+            max_error = angular_errors[worst_local_idx]
             
             if iteration % 10 == 0:
                 print(f"  Iter {iteration}: Error màx = {max_error:.2f}°")
             
-            # Generar snapshot d'error
+            # Generar snapshot d'error (usar errors angulars purs per visualització)
             if iteration % snapshot_interval == 0:
                 self._save_error_snapshot(snapshot_dir, iteration, candidate_indices, 
-                                         errors, worst_local_idx, spacing)
+                                         angular_errors, worst_local_idx, spacing)
             
             new_xy, new_z = self._get_coords_from_index(worst_global_idx)
             self.tin.add_points([new_xy])
