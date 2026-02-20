@@ -16,7 +16,6 @@ class GridToTinConverter:
         self.control_mode = control_mode
         self.target_error_percentage = target_error_percentage
         self.target_point_count = target_point_count
-        self.safeguard_max_points = 5000 
         self.all_points_3d = None
         self.num_total_points = 0
         self.elevation_range = 0
@@ -66,7 +65,6 @@ class GridToTinConverter:
         
         if self.control_mode == 'ERROR':
             max_error_threshold = (self.target_error_percentage / 100.0) * self.elevation_range
-            max_points_threshold = self.safeguard_max_points
             #print(f"MODO: Límit per Error. Objectiu: {max_error_threshold:.2f} unitats")
         elif self.control_mode == 'POINT_COUNT':
             max_error_threshold = 0.0 # Error 0, mai s'assolirà
@@ -98,7 +96,7 @@ class GridToTinConverter:
             
             point_to_add_global_index = P_indices[max_err_local_index]
             
-            if iteration % 10 == 0 or iteration == 1:
+            if iteration % 10 == 0:
                 print(f"  Iter. {iteration}: Punts TIN = {len(S_indices)}, Error Màx. Actual = {max_err:.2f}")
 
             if max_err <= max_error_threshold:
@@ -127,9 +125,7 @@ class GridToTinConverter:
         #print(f"TIN final generat amb {len(self.final_points_3d)} vèrtexs.")
 
     def fit_with_error_snapshots(self, npy_file_path, snapshot_dir='snapshots_error_original', snapshot_interval=5):
-        """
-        Executa l'algoritme i genera snapshots mostrant l'ERROR d'alçada
-        """
+
         self._load_and_sample_grid(npy_file_path)
         
         os.makedirs(snapshot_dir, exist_ok=True)
@@ -180,7 +176,6 @@ class GridToTinConverter:
     
     def _save_error_snapshot(self, snapshot_dir, iteration, S_indices, P_indices, 
                             errors, max_err_idx, spacing):
-        """Guarda snapshot mostrant l'error d'alçada"""
         fig, ax = plt.subplots(figsize=(12, 10))
         
         # Crear mapa d'error (mostrejat cada 5 píxels)

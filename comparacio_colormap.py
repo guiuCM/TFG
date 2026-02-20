@@ -9,7 +9,7 @@ import time
 FILENAME = 'bassiero.npy'
 STEP = 1
 PIXEL_SIZE = 2.0
-TARGET_POINTS = 500
+TARGET_POINTS = 2000
 
 #passa de nou la malla a pixels, per a que les coordenades del TIN estiguin en metres i no en índexs de la matriu
 def interpolate_tin_heights(tin, z_values, rows, cols, step, pixel_size):
@@ -54,18 +54,13 @@ def interpolate_tin_heights(tin, z_values, rows, cols, step, pixel_size):
 
 
 def calculate_slope_from_heights(h_grid, spacing):
-    """
-    Calcula el pendent (magnitud del gradient) a partir d'una matriu d'alçades.
-    """
+    #Calcula el pendent (magnitud del gradient) a partir d'una matriu d'alçades.
     dy, dx = np.gradient(h_grid, spacing, spacing)
     return np.sqrt(dx**2 + dy**2)
 
 
 def calculate_slope_from_tin_normals(tin, z_values, rows, cols, step, pixel_size):
-    """
-    Calcula el pendent directament des de les normals dels triangles del TIN,
-    sense interpolar alçades primer.
-    """
+    #Calcula el pendent directament des de les normals dels triangles del TIN, sense interpolar alçades primer.
     spacing = step * pixel_size
     
     # Crear coordenades de tots els punts del grid
@@ -112,9 +107,6 @@ def calculate_slope_from_tin_normals(tin, z_values, rows, cols, step, pixel_size
 
 
 def plot_comparison_colormaps(h_grid_real, h_grid_tin, slope_real, slope_tin, title_prefix, filename):
-    """
-    Genera colormaps de diferències d'alçada i pendent.
-    """
     # Diferències
     diff_height = h_grid_tin - h_grid_real
     diff_slope = slope_tin - slope_real

@@ -1,5 +1,4 @@
 # Anàlisi i Debugging de pendent6.py
-**Data:** 12 de febrer de 2026  
 **Context:** Comparació entre algoritmes de generació TIN basat en error d'alçada (original.py) vs error angular (pendent6.py)
 
 ---

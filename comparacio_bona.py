@@ -112,7 +112,7 @@ if __name__ == "__main__":
     print(f"{'MÈTRICA':<20} | {'Mitjana (mín-màx)':<25} | {'Std (mín-màx)':<25}")
     print("-"*60)
     print(f"{'original (Alçada)':<20} | {np.mean(means_h):.3f} ({np.min(means_h):.3f}-{np.max(means_h):.3f}) | {np.mean(stds_h):.3f} ({np.min(stds_h):.3f}-{np.max(stds_h):.3f})")
-    print(f"{'Pendent5 (Angle)':<20} | {np.mean(means_a):.3f} ({np.min(means_a):.3f}-{np.max(means_a):.3f}) | {np.mean(stds_a):.3f} ({np.min(stds_a):.3f}-{np.max(stds_a):.3f})")
+    print(f"{'Pendent6 (Angle)':<20} | {np.mean(means_a):.3f} ({np.min(means_a):.3f}-{np.max(means_a):.3f}) | {np.mean(stds_a):.3f} ({np.min(stds_a):.3f}-{np.max(stds_a):.3f})")
     print("="*60)
     
     plt.show()

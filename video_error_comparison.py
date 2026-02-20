@@ -1,23 +1,14 @@
-#!/usr/bin/env python3
-"""
-Script per generar vídeos mostrant l'ERROR en cada iteració
-- original.py: mostra error d'alçada (diferència Z entre TIN i realitat)
-- pendent6.py: mostra error angular (diferència entre normals)
-"""
 
 import os
 from PIL import Image
 import subprocess
 
-# Importar les classes dels algoritmes
 from original import GridToTinConverter
 from pendent6 import GridToTinIncremental
 
 
 def generate_error_video_original(npy_file, target_points=500, output_dir='snapshots_error_original'):
-    """
-    Genera snapshots mostrant l'error d'alçada per original.py
-    """
+
     print(f"Generant snapshots d'error per original.py amb {target_points} punts...")
     
     converter = GridToTinConverter(step=1, pixel_size=2.0, 
@@ -29,9 +20,7 @@ def generate_error_video_original(npy_file, target_points=500, output_dir='snaps
 
 
 def generate_error_video_pendent(npy_file, target_points=500, output_dir='snapshots_error_pendent'):
-    """
-    Genera snapshots mostrant l'error angular per pendent6.py
-    """
+
     print(f"Generant snapshots d'error per pendent6.py amb {target_points} punts...")
     
     conv = GridToTinIncremental(step=1, pixel_size=2.0, target_point_count=target_points)
@@ -41,9 +30,7 @@ def generate_error_video_pendent(npy_file, target_points=500, output_dir='snapsh
 
 
 def create_side_by_side_video(dir_original, dir_pendent, output_file='video_error_comparison.mp4'):
-    """
-    Combina els snapshots en un vídeo side-by-side
-    """
+
     print(f"\nCombinant snapshots en vídeo side-by-side...")
     
     snapshots_o = sorted([f for f in os.listdir(dir_original) if f.endswith('.png')])
@@ -111,11 +98,6 @@ if __name__ == '__main__':
     NPY_FILE = 'bassiero.npy'
     TARGET_POINTS = 2000
     
-    print("="*70)
-    print("GENERACIÓ DE VÍDEOS D'ERROR COMPARATIUS")
-    print("="*70)
-    print()
-    
     # Generar snapshots per ambdós algoritmes
     dir_original = generate_error_video_original(NPY_FILE, TARGET_POINTS)
     dir_pendent = generate_error_video_pendent(NPY_FILE, TARGET_POINTS)
@@ -124,6 +106,4 @@ if __name__ == '__main__':
     create_side_by_side_video(dir_original, dir_pendent, 'video_error_comparisons.mp4')
     
     print()
-    print("="*70)
     print("✓ PROCÉS COMPLETAT")
-    print("="*70)
