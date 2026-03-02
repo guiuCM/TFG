@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import TwoSlopeNorm
 from original import GridToTinConverter
-from pendent6 import GridToTinIncremental
+from pendent7 import GridToTinIncremental
 import time
 
 
@@ -216,16 +216,18 @@ if __name__ == "__main__":
     # Per original.py calculem pendent del grid interpolat (com sempre)
     slope_tin_original = calculate_slope_from_heights(h_tin_original, spacing)
     
-    # --- MODEL 2: Pendent6.py (error angular) ---
-    print("\n>> Executant Pendent6.py (criteri: angle)...")
+    # --- MODEL 2: Pendent7.py (error angular) ---
+    MODE_PENDENT7 = 'mean_normal'  # canvia a 'point' o 'triangle' per comparar altres modes
+
+    print(f"\n>> Executant Pendent7.py (mode={MODE_PENDENT7})...")
     t0 = time.perf_counter()
-    converter_a = GridToTinIncremental(step=STEP, pixel_size=PIXEL_SIZE, target_point_count=TARGET_POINTS)
+    converter_a = GridToTinIncremental(step=STEP, pixel_size=PIXEL_SIZE, target_point_count=TARGET_POINTS, mode=MODE_PENDENT7)
     verts, triangles = converter_a.fit(FILENAME)
     t1 = time.perf_counter()
     print(f"   Temps: {t1 - t0:.2f}s, Punts: {len(converter_a.tin.points)}")
     
     # DEBUG: Mostrar coordenades
-    print(f"   [DEBUG] Coordenades pendent6.py:")
+    print(f"   [DEBUG] Coordenades pendent7.py:")
     print(f"     X range: {converter_a.tin.points[:, 0].min():.2f} - {converter_a.tin.points[:, 0].max():.2f}")
     print(f"     Y range: {converter_a.tin.points[:, 1].min():.2f} - {converter_a.tin.points[:, 1].max():.2f}")
     print(f"     Z range: {min(converter_a.tin_z_values):.2f} - {max(converter_a.tin_z_values):.2f}")
@@ -253,14 +255,14 @@ if __name__ == "__main__":
     
     diff_h_pendent, diff_s_pendent = plot_comparison_colormaps(
         h_grid_real, h_tin_pendent, slope_real, slope_tin_pendent,
-        "Pendent6.py (Angle)", "colormap_pendent6.png"
+        f"Pendent7.py ({MODE_PENDENT7})", f"colormap_pendent7_{MODE_PENDENT7}.png"
     )
     
     # --- COMPARACIÓ DIRECTA ---
     print("\n>> Generant comparació directa...")
     
     fig, axes = plt.subplots(2, 2, figsize=(14, 12))
-    fig.suptitle(f"Comparació Directa: original vs Pendent6 ({TARGET_POINTS} punts)", fontsize=14)
+    fig.suptitle(f"Comparació Directa: original vs Pendent7 [{MODE_PENDENT7}] ({TARGET_POINTS} punts)", fontsize=14)
     
     # Diferència alçades - original
     max_h = max(np.nanmax(np.abs(diff_h_original)), np.nanmax(np.abs(diff_h_pendent)))
@@ -271,7 +273,7 @@ if __name__ == "__main__":
     plt.colorbar(im1, ax=axes[0, 0], label='Diferència (m)')
     
     im2 = axes[0, 1].imshow(diff_h_pendent, cmap='RdBu_r', norm=norm_h, origin='lower')
-    axes[0, 1].set_title(f'Pendent6.py - Error Alçada\nRMSE: {np.sqrt(np.nanmean(diff_h_pendent**2)):.2f} m')
+    axes[0, 1].set_title(f'Pendent7.py [{MODE_PENDENT7}] - Error Alçada\nRMSE: {np.sqrt(np.nanmean(diff_h_pendent**2)):.2f} m')
     plt.colorbar(im2, ax=axes[0, 1], label='Diferència (m)')
     
     # Diferència pendents
@@ -283,7 +285,7 @@ if __name__ == "__main__":
     plt.colorbar(im3, ax=axes[1, 0], label='Diferència pendent')
     
     im4 = axes[1, 1].imshow(diff_s_pendent, cmap='RdBu_r', norm=norm_s, origin='lower')
-    axes[1, 1].set_title(f'Pendent6.py - Error Pendent\nRMSE: {np.sqrt(np.nanmean(diff_s_pendent**2)):.4f}')
+    axes[1, 1].set_title(f'Pendent7.py [{MODE_PENDENT7}] - Error Pendent\nRMSE: {np.sqrt(np.nanmean(diff_s_pendent**2)):.4f}')
     plt.colorbar(im4, ax=axes[1, 1], label='Diferència pendent')
     
     plt.tight_layout()
@@ -294,7 +296,7 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("RESUM COMPARATIU")
     print("=" * 60)
-    print(f"{'Mètrica':<25} | {'original.py':<15} | {'Pendent6.py':<15}")
+    print(f"{'Mètrica':<25} | {'original.py':<15} | {f'Pendent7 [{MODE_PENDENT7}]':<15}")
     print("-" * 60)
     print(f"{'RMSE Alçada (m)':<25} | {np.sqrt(np.nanmean(diff_h_original**2)):<15.4f} | {np.sqrt(np.nanmean(diff_h_pendent**2)):<15.4f}")
     print(f"{'MAE Alçada (m)':<25} | {np.nanmean(np.abs(diff_h_original)):<15.4f} | {np.nanmean(np.abs(diff_h_pendent)):<15.4f}")

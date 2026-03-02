@@ -4,7 +4,7 @@ from PIL import Image
 import subprocess
 
 from original import GridToTinConverter
-from pendent6 import GridToTinIncremental
+from pendent7 import GridToTinIncremental
 
 
 def generate_error_video_original(npy_file, target_points=500, output_dir='snapshots_error_original'):
@@ -21,7 +21,7 @@ def generate_error_video_original(npy_file, target_points=500, output_dir='snaps
 
 def generate_error_video_pendent(npy_file, target_points=500, output_dir='snapshots_error_pendent'):
 
-    print(f"Generant snapshots d'error per pendent6.py amb {target_points} punts...")
+    print(f"Generant snapshots d'error per pendent7.py amb {target_points} punts...")
     
     conv = GridToTinIncremental(step=1, pixel_size=2.0, target_point_count=target_points)
     conv.fit_with_error_snapshots(npy_file, snapshot_dir=output_dir, snapshot_interval=5)
@@ -58,7 +58,7 @@ def create_side_by_side_video(dir_original, dir_pendent, output_file='video_erro
             height += 1
         
         combined = Image.new('RGB', (width, height), (255, 255, 255))
-        combined.paste(img_p, (0, 0))  # pendent6 a l'esquerra
+        combined.paste(img_p, (0, 0))  # pendent7 a l'esquerra
         combined.paste(img_o, (img_p.width, 0))  # original a la dreta
         
         combined.save(os.path.join(combined_dir, f'combined_{i:04d}.png'))

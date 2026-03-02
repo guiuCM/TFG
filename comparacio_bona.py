@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from original import GridToTinConverter
-from pendent6 import GridToTinIncremental
+from pendent7 import GridToTinIncremental
 import time
 
 
@@ -64,8 +64,9 @@ if __name__ == "__main__":
                                                  h_grid_h, rows_h, cols_h, STEP, PIXEL_SIZE)
     
     # pendent.py
+    MODE_PENDENT7 = 'mean_normal'  # canvia a 'point' o 'triangle' per comparar altres modes
     t0 = time.perf_counter()
-    converter_a = GridToTinIncremental(step=STEP, pixel_size=PIXEL_SIZE, target_point_count=TARGET_POINTS)
+    converter_a = GridToTinIncremental(step=STEP, pixel_size=PIXEL_SIZE, target_point_count=TARGET_POINTS, mode=MODE_PENDENT7)
     verts, triangles = converter_a.fit(FILENAME)
     t1 = time.perf_counter()
     print(f"   Temps: {t1 - t0:.2f}s, Punts: {len(converter_a.tin.points)}")
@@ -76,11 +77,11 @@ if __name__ == "__main__":
     #boxplots
     print("\n>> Generant boxplots...")
     fig = plt.figure(figsize=(14, 6))
-    plt.suptitle(f"Comparació original.py vs Pendent6.py ({TARGET_POINTS} punts, step={STEP})", fontsize=14)
+    plt.suptitle(f"Comparació original.py vs Pendent7.py [{MODE_PENDENT7}] ({TARGET_POINTS} punts, step={STEP})", fontsize=14)
     
     # Mitjana Pendent
     ax1 = plt.subplot(1, 2, 1)
-    bp1 = ax1.boxplot([means_h, means_a], labels=['original (Alçada)', 'Pendent6 (Angle)'], patch_artist=True)
+    bp1 = ax1.boxplot([means_h, means_a], labels=['original (Alçada)', f'Pendent7 [{MODE_PENDENT7}]'], patch_artist=True)
     colors = ['lightblue', 'lightcoral']
     for patch, color in zip(bp1['boxes'], colors):
         patch.set_facecolor(color)
@@ -92,7 +93,7 @@ if __name__ == "__main__":
     
     # Desviació Estàndard
     ax2 = plt.subplot(1, 2, 2)
-    bp2 = ax2.boxplot([stds_h, stds_a], labels=['original (Alçada)', 'Pendent6 (Angle)'], patch_artist=True)
+    bp2 = ax2.boxplot([stds_h, stds_a], labels=['original (Alçada)', f'Pendent7 [{MODE_PENDENT7}]'], patch_artist=True)
     for patch, color in zip(bp2['boxes'], colors):
         patch.set_facecolor(color)
     ax2.scatter([1] * len(stds_h), stds_h, alpha=0.3, s=20, color='blue')
@@ -112,7 +113,7 @@ if __name__ == "__main__":
     print(f"{'MÈTRICA':<20} | {'Mitjana (mín-màx)':<25} | {'Std (mín-màx)':<25}")
     print("-"*60)
     print(f"{'original (Alçada)':<20} | {np.mean(means_h):.3f} ({np.min(means_h):.3f}-{np.max(means_h):.3f}) | {np.mean(stds_h):.3f} ({np.min(stds_h):.3f}-{np.max(stds_h):.3f})")
-    print(f"{'Pendent6 (Angle)':<20} | {np.mean(means_a):.3f} ({np.min(means_a):.3f}-{np.max(means_a):.3f}) | {np.mean(stds_a):.3f} ({np.min(stds_a):.3f}-{np.max(stds_a):.3f})")
+    print(f"{f'Pendent7 [{MODE_PENDENT7}]':<20} | {np.mean(means_a):.3f} ({np.min(means_a):.3f}-{np.max(means_a):.3f}) | {np.mean(stds_a):.3f} ({np.min(stds_a):.3f}-{np.max(stds_a):.3f})")
     print("="*60)
     
     plt.show()

@@ -526,7 +526,7 @@ class GridToTinIncremental:
         plt.show()
 
 if __name__ == "__main__":
-    converter = GridToTinIncremental(step=1, pixel_size=2.0, target_point_count=2000)
+    converter = GridToTinIncremental(step=1, pixel_size=2.0, target_point_count=500)
     
     t0 = time.perf_counter()
     verts, triangles = converter.fit('bassiero.npy', snapshot_dir='snapshots_tin_pendent_video', snapshot_interval=1)

@@ -115,3 +115,11 @@ original (Alçada)    | 1.932 (0.026-23.535) | 0.839 (0.000-7.679)
 Pendent6 (Angle)     | 1.530 (0.087-13.061) | 0.606 (0.000-4.764)
 ============================================================
 
+
+
+
+
+
+
+
+Tria per triangles (mitjana dels errors de cada triangle x sqrt(area)) -més robust, evita outliers

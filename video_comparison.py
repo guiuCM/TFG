@@ -3,7 +3,7 @@ from PIL import Image
 import subprocess
 
 from original import GridToTinConverter
-from pendent6 import GridToTinIncremental
+from pendent7 import GridToTinIncremental
 
 
 def generate_video_original(npy_file, target_points=500, output_dir='snapshots_tin'):
@@ -20,7 +20,7 @@ def generate_video_original(npy_file, target_points=500, output_dir='snapshots_t
 
 def generate_video_pendent(npy_file, target_points=500, output_dir='snapshots_tin_pendent_video'):
 
-    print(f"Generant snapshots per pendent6.py amb {target_points} punts...")
+    print(f"Generant snapshots per pendent7.py amb {target_points} punts...")
     
     conv = GridToTinIncremental(step=1, pixel_size=2.0, target_point_count=target_points)
     conv.fit(npy_file, snapshot_dir=output_dir, snapshot_interval=5)
@@ -57,7 +57,7 @@ def create_side_by_side_video(dir_original, dir_pendent, output_file='video_comp
             height += 1
         
         combined = Image.new('RGB', (width, height), (255, 255, 255))
-        combined.paste(img_p, (0, 0))  # pendent6 a l'esquerra
+        combined.paste(img_p, (0, 0))  # pendent7 a l'esquerra
         combined.paste(img_o, (img_p.width, 0))  # original a la dreta
         
         combined.save(os.path.join(combined_dir, f'combined_{i:04d}.png'))
@@ -95,7 +95,7 @@ def create_side_by_side_video(dir_original, dir_pendent, output_file='video_comp
 
 if __name__ == '__main__':
     NPY_FILE = 'bassiero.npy'
-    TARGET_POINTS = 500
+    TARGET_POINTS = 2000
     
     # Generar snapshots per ambdós algoritmes
     dir_original = generate_video_original(NPY_FILE, TARGET_POINTS)
