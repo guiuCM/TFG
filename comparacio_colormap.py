@@ -9,7 +9,7 @@ import time
 FILENAME = 'bassiero.npy'
 STEP = 1
 PIXEL_SIZE = 2.0
-TARGET_POINTS = 2000
+TARGET_POINTS = 500
 
 #passa de nou la malla a pixels, per a que les coordenades del TIN estiguin en metres i no en índexs de la matriu
 def interpolate_tin_heights(tin, z_values, rows, cols, step, pixel_size):

@@ -96,7 +96,7 @@ def create_side_by_side_video(dir_original, dir_pendent, output_file='video_erro
 
 if __name__ == '__main__':
     NPY_FILE = 'bassiero.npy'
-    TARGET_POINTS = 2000
+    TARGET_POINTS = 100
     
     # Generar snapshots per ambdós algoritmes
     dir_original = generate_error_video_original(NPY_FILE, TARGET_POINTS)

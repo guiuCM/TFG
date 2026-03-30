@@ -8,7 +8,7 @@ import time
 FILENAME = 'bassiero.npy'
 STEP = 1
 PIXEL_SIZE = 2.0
-TARGET_POINTS = 2000
+TARGET_POINTS = 500
 
 def calculate_stats_for_model(model_tin, h_grid, rows, cols, step, pixel_size):
     spacing = step * pixel_size

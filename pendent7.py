@@ -327,6 +327,96 @@ class GridToTinIncremental:
     # Mètode principal: fit
     # ------------------------------------------------------------------
 
+    def fit_with_error_snapshots(self, npy_file_path,
+                                 snapshot_dir='snapshots_error_pendent',
+                                 snapshot_interval=5):
+        """Igual que fit() però guarda snapshots de l'error angular a cada interval."""
+        if not self._load_data(npy_file_path):
+            return None, None
+
+        os.makedirs(snapshot_dir, exist_ok=True)
+        print(f"Les imatges d'error es guardaran a: {snapshot_dir}/  [mode={self.mode}]")
+
+        candidate_indices = self._initialize_tin()
+
+        iteration = 0
+        new_xy = None
+
+        while len(self.tin.points) < self.target_point_count and len(candidate_indices) > 0:
+            iteration += 1
+
+            worst_local, worst_global = self._select_next(candidate_indices)
+
+            if iteration % 10 == 0:
+                angular = self._calculate_angular_error(candidate_indices)
+                max_err = angular[worst_local]
+                print(f"[{self.mode}] Iter {iteration}: error_angular_màx = {max_err:.2f}°, "
+                      f"punts = {len(self.tin.points)}")
+
+            new_xy, new_z = self._get_coords_from_index(worst_global)
+
+            if iteration % snapshot_interval == 0:
+                self._save_angular_error_snapshot(
+                    snapshot_dir, iteration, candidate_indices, worst_local, new_xy)
+
+            self.tin.add_points([new_xy])
+            self.tin_z_values.append(new_z)
+            candidate_indices.pop(worst_local)
+
+        # Snapshot final
+        if new_xy is not None:
+            self._save_angular_error_snapshot(
+                snapshot_dir, iteration, candidate_indices, -1, new_xy)
+
+        print(f"\n[DEBUG] Punts XY: {len(self.tin.points)} | Valors Z: {len(self.tin_z_values)}")
+        if len(self.tin.points) != len(self.tin_z_values):
+            print("  ⚠️ ALERTA: Desincronització detectada!")
+
+        print(f"✓ Snapshots d'error guardats a {snapshot_dir}/")
+        return self.tin.points, self.tin.simplices
+
+    def _save_angular_error_snapshot(self, snapshot_dir, iteration,
+                                     candidate_indices, worst_local, last_added_xy):
+        if len(self.tin.simplices) == 0 or len(candidate_indices) == 0:
+            return
+
+        candidate_arr = np.asarray(candidate_indices)
+        angular_errors = self._calculate_angular_error(candidate_arr)
+
+        rows_c, cols_c = np.divmod(candidate_arr, self.cols)
+        x_c = cols_c * self.step * self.pixel_size
+        y_c = rows_c * self.step * self.pixel_size
+
+        fig, ax = plt.subplots(figsize=(12, 10))
+
+        sc = ax.scatter(x_c, y_c, c=angular_errors, cmap='hot_r',
+                        vmin=0, vmax=90, s=2, alpha=0.8)
+        ax.triplot(self.tin.points[:, 0], self.tin.points[:, 1], self.tin.simplices,
+               color='cyan', linestyle='-', linewidth=0.5, alpha=0.6)
+        ax.scatter(self.tin.points[:, 0], self.tin.points[:, 1],
+                   c='white', s=15, edgecolors='black', linewidths=0.5, zorder=5, alpha=0.8)
+        ax.scatter(last_added_xy[0], last_added_xy[1],
+                   c='lime', s=100, edgecolors='white', linewidths=2, zorder=10, marker='*')
+
+        if 0 <= worst_local < len(candidate_indices):
+            nr, nc = divmod(candidate_indices[worst_local], self.cols)
+            ax.scatter(nc * self.step * self.pixel_size, nr * self.step * self.pixel_size,
+                       c='red', s=100, edgecolors='yellow', linewidths=2, zorder=10, marker='X')
+
+        plt.colorbar(sc, ax=ax, label='Error angular (graus)')
+        ax.set_title(
+            f"pendent7.py [{self.mode}] - ERROR ANGULAR | Iter {iteration} | Punts: {len(self.tin.points)}",
+            fontsize=14, fontweight='bold')
+        ax.set_xlabel('X (m)')
+        ax.set_ylabel('Y (m)')
+        ax.set_xlim(0, (self.cols - 1) * self.step * self.pixel_size)
+        ax.set_ylim(0, (self.rows - 1) * self.step * self.pixel_size)
+        ax.set_aspect('equal', adjustable='box')
+
+        filename = os.path.join(snapshot_dir, f'frame_{iteration:04d}.png')
+        plt.savefig(filename, dpi=100, bbox_inches='tight')
+        plt.close(fig)
+
     def fit(self, npy_file_path, snapshot_dir=None, snapshot_interval=100):
         if not self._load_data(npy_file_path):
             return None, None
