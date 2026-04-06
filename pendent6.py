@@ -78,9 +78,10 @@ class GridToTinIncremental:
         
         # Normalitzem els vectors del TIN
         norms = np.linalg.norm(tin_normals, axis=1, keepdims=True)
-        tin_normals = tin_normals / norms 
-        #podria donar error de divisió per zero?
-        #tin_normals = tin_normals / np.maximum(norms, 1e-10)
+        # Protecció contra divisió per zero (triangles degenerats amb àrea zero)
+        zero_norm_mask = norms.flatten() < 1e-8
+        tin_normals = tin_normals / (norms + 1e-10)
+        tin_normals[zero_norm_mask] = [0, 0, 1]  # Normal per defecte (apuntant amunt)
         
         # Assegurem que la Z sempre apunti amunt
         flip_vec = tin_normals[:, 2] < 0
@@ -88,6 +89,9 @@ class GridToTinIncremental:
         
         # CÀLCUL DE L'ERROR ANGULAR
         dot_product = np.einsum('ij,ij->i', real_normals, tin_normals) # Producte escalar
+        # CLIPPING: Per errors de precisió flotant, el dot product pot ser >1 o <-1
+        # això faria petar l'arccos. Ho limitem a [-1, 1]
+        dot_product = np.clip(dot_product, -1.0, 1.0)
         angles_rad = np.arccos(dot_product)
         angles_deg = np.degrees(angles_rad)
         
@@ -113,7 +117,10 @@ class GridToTinIncremental:
         v = p2 - p0
         n = np.cross(u, v)
         norms = np.linalg.norm(n, axis=1, keepdims=True)
-        n = n / norms
+        # Protecció contra divisió per zero (triangles degenerats)
+        zero_norm_mask = norms.flatten() < 1e-8
+        n = n / (norms + 1e-10)
+        n[zero_norm_mask] = [0, 0, 1]  # Normal per defecte
         flip = n[:, 2] < 0
         n[flip] *= -1
         return n
