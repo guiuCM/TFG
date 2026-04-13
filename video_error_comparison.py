@@ -19,7 +19,7 @@ def generate_error_video_original(npy_file, target_points=500, output_dir='snaps
     return output_dir
 
 
-def generate_error_video_pendent(npy_file, target_points=500, output_dir='snapshots_error_pendent'):
+def generate_error_video_pendent(npy_file, target_points=500, output_dir='snapshots_error_pendent_p7.1'):
 
     print(f"Generant snapshots d'error per pendent7.py amb {target_points} punts...")
     
@@ -96,14 +96,19 @@ def create_side_by_side_video(dir_original, dir_pendent, output_file='video_erro
 
 if __name__ == '__main__':
     NPY_FILE = 'bassiero.npy'
-    TARGET_POINTS = 100
+    TARGET_POINTS = 2000
+    OUTPUT_DIR = 'snapshots_error_pendent_p7.1'
+    OUTPUT_VIDEO = 'video_error_comparison_p7.1.mp4'
     
     # Generar snapshots per ambdós algoritmes
-    dir_original = generate_error_video_original(NPY_FILE, TARGET_POINTS)
-    dir_pendent = generate_error_video_pendent(NPY_FILE, TARGET_POINTS)
+    #dir_original = generate_error_video_original(NPY_FILE, TARGET_POINTS)
+    dir_original = 'snapshots_error_original'
+    
+    dir_pendent = generate_error_video_pendent(NPY_FILE, TARGET_POINTS, output_dir=OUTPUT_DIR)
+    #dir_pendent = 'snapshots_error_pendent_p6.2'
     
     # Combinar en vídeo
-    create_side_by_side_video(dir_original, dir_pendent, 'video_error_comparisons.mp4')
+    create_side_by_side_video(dir_original, dir_pendent, OUTPUT_VIDEO)
     
     print()
     print("✓ PROCÉS COMPLETAT")

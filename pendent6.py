@@ -139,7 +139,7 @@ class GridToTinIncremental:
         candidate_areas[valid_mask] = all_areas[simplex_ids[valid_mask]]
         
         #Score = angular_error * sqrt(triangle_area)
-        weighted_score = angular_errors * np.sqrt(candidate_areas)
+        weighted_score = angular_errors * np.log(candidate_areas)
         
         return weighted_score
 
