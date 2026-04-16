@@ -153,7 +153,7 @@ def _save_error_snapshot(snapshot_dir, iteration, rows, cols, spacing,
 
 
 def generate_original_error_snapshots(npy_file, target_points, metric, output_dir,
-                                      snapshot_interval, vmin, vmax):
+                                      snapshot_interval, vmin, vmax, log_interval=10):
     print(f"Generant snapshots de {metric} per original.py...")
     os.makedirs(output_dir, exist_ok=True)
 
@@ -208,6 +208,13 @@ def generate_original_error_snapshots(npy_file, target_points, metric, output_di
             title_prefix = 'original.py - ERROR ANGULAR'
 
         worst_for_visual = int(np.argmax(vis_errors))
+
+        if log_interval > 0 and iteration % log_interval == 0:
+            unit = 'm' if metric == 'height' else 'graus'
+            print(
+                f"  [original][{metric}] Iter {iteration}: "
+                f"error_max={vis_errors[worst_for_visual]:.2f} {unit}"
+            )
 
         if iteration % snapshot_interval == 0:
             _save_error_snapshot(
@@ -270,7 +277,8 @@ def _initialize_pendent6(conv):
 
 
 def generate_pendent_error_snapshots(npy_file, target_points, algorithm, p7_mode,
-                                     metric, output_dir, snapshot_interval, vmin, vmax):
+                                     metric, output_dir, snapshot_interval, vmin, vmax,
+                                     log_interval=10):
     print(f"Generant snapshots de {metric} per {algorithm}.py...")
     os.makedirs(output_dir, exist_ok=True)
 
@@ -323,6 +331,14 @@ def generate_pendent_error_snapshots(npy_file, target_points, algorithm, p7_mode
                 title_prefix = "pendent6.py - ERROR D'ALÇADA"
 
         worst_for_visual = int(np.argmax(vis_errors))
+
+        if log_interval > 0 and iteration % log_interval == 0:
+            unit = 'm' if metric == 'height' else 'graus'
+            mode_suffix = f"[{conv.mode}]" if algorithm == 'pendent7' else ''
+            print(
+                f"  [{algorithm}]{mode_suffix}[{metric}] Iter {iteration}: "
+                f"error_max={vis_errors[worst_for_visual]:.2f} {unit}"
+            )
 
         if iteration % snapshot_interval == 0:
             _save_error_snapshot(
@@ -423,12 +439,14 @@ def main():
     )
     parser.add_argument('--npy', default='bassiero.npy', help='Fitxer .npy d\'entrada')
     parser.add_argument('--target-points', type=int, default=2000, help='Nombre de punts objectiu')
-    parser.add_argument('--algorithm', choices=['pendent6', 'pendent7'], default='pendent7',
+    parser.add_argument('--algorithm', choices=['pendent6', 'pendent7'], default='pendent6',
                         help='Algoritme incremental per comparar amb original.py')
     parser.add_argument('--p7-mode', choices=['point', 'triangle', 'mean_normal'], default='triangle',
                         help='Mode de pendent7 (només s\'usa amb --algorithm pendent7)')
     parser.add_argument('--snapshot-interval', type=int, default=5,
                         help='Cada quantes iteracions es guarda un frame')
+    parser.add_argument('--log-interval', type=int, default=10,
+                        help='Cada quantes iteracions es mostra error per terminal (0 = desactivar)')
     parser.add_argument('--vmin-angular', type=float, default=None, help='Vmin de la barra angular')
     parser.add_argument('--vmax-angular', type=float, default=None, help='Vmax de la barra angular')
     parser.add_argument('--vmin-height', type=float, default=None, help='Vmin de la barra d\'alçada')
@@ -463,6 +481,7 @@ def main():
         snapshot_interval=args.snapshot_interval,
         vmin=angular_vmin,
         vmax=angular_vmax,
+        log_interval=args.log_interval,
     )
 
     # dir_pendent_angular = generate_pendent_error_snapshots(
@@ -475,6 +494,7 @@ def main():
     #     snapshot_interval=args.snapshot_interval,
     #     vmin=angular_vmin,
     #     vmax=angular_vmax,
+    #     log_interval=args.log_interval,
     # )
     dir_pendent_angular = 'snapshots_error_pendent_p6.1'  # Placeholder per no generar aquest vídeo ara
 
@@ -489,6 +509,7 @@ def main():
     #     snapshot_interval=args.snapshot_interval,
     #     vmin=height_vmin,
     #     vmax=height_vmax,
+    #     log_interval=args.log_interval,
     # )
 
     dir_original_height = 'snapshots_error_original'  # Placeholder per no generar aquest vídeo ara
@@ -503,6 +524,7 @@ def main():
         snapshot_interval=args.snapshot_interval,
         vmin=height_vmin,
         vmax=height_vmax,
+        log_interval=args.log_interval,
     )
 
     height_video = f"{args.output_prefix}_{args.algorithm}_height.mp4"
