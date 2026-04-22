@@ -556,7 +556,7 @@ if __name__ == "__main__":
     # --- Mode mean_normal (NOU) ---
     converter = GridToTinIncremental(
         step=1, pixel_size=2.0, target_point_count=500,
-        mode='mean_normal'
+        mode='triangle'
     )
 
     t0 = time.perf_counter()
