@@ -368,7 +368,7 @@ def generate_pendent_error_snapshots(npy_file, target_points, algorithm, p7_mode
     return output_dir
 
 
-def create_side_by_side_video(dir_original, dir_pendent, output_file='video_error_comparison.mp4'):
+def create_side_by_side_video(dir_original, dir_pendent, output_file='video_error_comparison_6.1.mp4'):
 
     print(f"\nCombinant snapshots en vídeo side-by-side...")
     
@@ -473,16 +473,17 @@ def main():
     #out_dir_p_ang = f"snapshots_error_{pend_suffix}_angular"
     out_dir_p_hgt = f"snapshots_error_{pend_suffix}_height"
 
-    dir_original_angular = generate_original_error_snapshots(
-        args.npy,
-        args.target_points,
-        metric='angular',
-        output_dir=out_dir_o_ang,
-        snapshot_interval=args.snapshot_interval,
-        vmin=angular_vmin,
-        vmax=angular_vmax,
-        log_interval=args.log_interval,
-    )
+    dir_original_angular = 'snapshots_error_original_angular'  # Placeholder per no generar aquest vídeo ara
+    # dir_original_angular = generate_original_error_snapshots(
+    #     args.npy,
+    #     args.target_points,
+    #     metric='angular',
+    #     output_dir=out_dir_o_ang,
+    #     snapshot_interval=args.snapshot_interval,
+    #     vmin=angular_vmin,
+    #     vmax=angular_vmax,
+    #     log_interval=args.log_interval,
+    # )
 
     # dir_pendent_angular = generate_pendent_error_snapshots(
     #     args.npy,
@@ -496,10 +497,10 @@ def main():
     #     vmax=angular_vmax,
     #     log_interval=args.log_interval,
     # )
-    dir_pendent_angular = 'snapshots_error_pendent_p6.1'  # Placeholder per no generar aquest vídeo ara
+    dir_pendent_angular = 'snapshots_error_pendent_p7.2'  # Placeholder per no generar aquest vídeo ara
 
-    angular_video = f"{args.output_prefix}_{args.algorithm}_angular.mp4"
-    create_side_by_side_video(dir_original_angular, dir_pendent_angular, angular_video)
+    angular_video = "video_error_comparison_error_angular_7.2.mp4"
+    #create_side_by_side_video(dir_original_angular, dir_pendent_angular, angular_video)
 
     # dir_original_height = generate_original_error_snapshots(
     #     args.npy,
@@ -512,22 +513,22 @@ def main():
     #     log_interval=args.log_interval,
     # )
 
-    dir_original_height = 'snapshots_error_original'  # Placeholder per no generar aquest vídeo ara
+    dir_original_height = 'snapshots_error_original_height'  # Placeholder per no generar aquest vídeo ara
 
     dir_pendent_height = generate_pendent_error_snapshots(
         args.npy,
         args.target_points,
-        algorithm=args.algorithm,
+        algorithm = 'pendent7',
         p7_mode=args.p7_mode,
         metric='height',
-        output_dir=out_dir_p_hgt,
+        output_dir="snapshots_error_pendent7.2_height",
         snapshot_interval=args.snapshot_interval,
         vmin=height_vmin,
         vmax=height_vmax,
         log_interval=args.log_interval,
     )
 
-    height_video = f"{args.output_prefix}_{args.algorithm}_height.mp4"
+    height_video = "video_error_comparison_error_height_7.2.mp4"
     create_side_by_side_video(dir_original_height, dir_pendent_height, height_video)
 
     print()
