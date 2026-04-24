@@ -17,22 +17,51 @@ import os
 
 class GridToTinIncremental:
 
-    def __init__(self, step=25, pixel_size=2.0, target_point_count=500, mode='triangle'):
+    def __init__(self, step=25, pixel_size=2.0, target_point_count=500,
+                 mode='triangle', control_mode='POINT_COUNT', target_error_percentage=5,
+                 error_metric='angular'):
         assert mode in ('point', 'triangle', 'mean_normal'), \
             "mode ha de se 'point', 'triangle' o 'mean_normal'"
+        assert control_mode in ('POINT_COUNT', 'ERROR'), \
+            "control_mode ha de ser 'POINT_COUNT' o 'ERROR'"
+        assert error_metric in ('angular', 'height'), \
+            "error_metric ha de ser 'angular' o 'height'"
         self.mode = mode
+        self.control_mode = control_mode
+        self.error_metric = error_metric
 
         self.step = step
         self.pixel_size = pixel_size
         self.target_point_count = target_point_count
+        self.target_error_percentage = target_error_percentage
 
         self.h_grid = None
         self.rows = 0
         self.cols = 0
+        self.elevation_range = 0.0
+        self.final_error_height = None
+        self.final_error_angular = None
 
         # TIN
         self.tin = None
         self.tin_z_values = []
+
+    def _get_max_error_and_threshold(self, candidate_indices):
+        """Retorna error màxim actual, llindar i etiqueta segons la mètrica escollida."""
+        if self.error_metric == 'angular':
+            errors = self._calculate_angular_error(candidate_indices)
+            max_error = float(np.max(errors)) if len(errors) > 0 else 0.0
+            threshold = (self.target_error_percentage / 100.0) * 180.0
+            metric_label = 'error angular (graus)'
+            self.final_error_angular = max_error
+            return max_error, threshold, metric_label
+
+        errors = self._calculate_height_error(candidate_indices)
+        max_error = float(np.max(errors)) if len(errors) > 0 else 0.0
+        threshold = (self.target_error_percentage / 100.0) * self.elevation_range
+        metric_label = 'error altura (m)'
+        self.final_error_height = max_error
+        return max_error, threshold, metric_label
 
     def _load_data(self, npy_file_path):
         try:
@@ -43,6 +72,7 @@ class GridToTinIncremental:
 
         self.h_grid = full_h[::self.step, ::self.step]
         self.rows, self.cols = self.h_grid.shape
+        self.elevation_range = float(np.max(self.h_grid) - np.min(self.h_grid))
 
         spacing = self.step * self.pixel_size
         dz_dy, dz_dx = np.gradient(self.h_grid, spacing, spacing)
@@ -127,6 +157,47 @@ class GridToTinIncremental:
         dot = np.einsum('ij,ij->i', real_normals, tin_normals)
         dot = np.clip(dot, -1.0, 1.0)
         return np.degrees(np.arccos(dot))
+
+    def _calculate_height_error(self, candidate_indices):
+        """Error d'alçada absolut entre la quadrícula i el pla del triangle del TIN."""
+        candidate_indices_arr = np.asarray(candidate_indices)
+        if len(candidate_indices_arr) == 0:
+            return np.array([])
+
+        rows, cols = np.divmod(candidate_indices_arr, self.cols)
+        x = cols * self.step * self.pixel_size
+        y = rows * self.step * self.pixel_size
+        coords = np.column_stack((x, y))
+
+        simplex_ids = self.tin.find_simplex(coords)
+        errors = np.zeros(len(candidate_indices_arr), dtype=float)
+        valid = simplex_ids != -1
+        if not np.any(valid):
+            return errors
+
+        tris = self.tin.simplices[simplex_ids[valid]]
+        tris_xy = self.tin.points[tris]
+        tris_z = np.asarray(self.tin_z_values)[tris]
+
+        p0 = np.column_stack((tris_xy[:, 0, 0], tris_xy[:, 0, 1], tris_z[:, 0]))
+        p1 = np.column_stack((tris_xy[:, 1, 0], tris_xy[:, 1, 1], tris_z[:, 1]))
+        p2 = np.column_stack((tris_xy[:, 2, 0], tris_xy[:, 2, 1], tris_z[:, 2]))
+
+        n = np.cross(p1 - p0, p2 - p0)
+        d = -(n[:, 0] * p0[:, 0] + n[:, 1] * p0[:, 1] + n[:, 2] * p0[:, 2])
+
+        xq = coords[valid, 0]
+        yq = coords[valid, 1]
+        denom = n[:, 2]
+        z_pred = np.empty_like(xq, dtype=float)
+        safe = np.abs(denom) > 1e-10
+
+        z_pred[safe] = -(n[safe, 0] * xq[safe] + n[safe, 1] * yq[safe] + d[safe]) / denom[safe]
+        z_pred[~safe] = np.mean(tris_z[~safe], axis=1)
+
+        real_z = self.h_grid[rows[valid], cols[valid]]
+        errors[valid] = np.abs(real_z - z_pred)
+        return errors
 
     # MODE 'point' (pendent 6)
     def _calculate_weighted_angular_error(self, candidate_indices):
@@ -327,31 +398,129 @@ class GridToTinIncremental:
     # Mètode principal: fit
     # ------------------------------------------------------------------
 
-    def fit_with_error_snapshots(self, npy_file_path,
-                                 snapshot_dir='snapshots_error_pendent',
-                                 snapshot_interval=5):
-        """Igual que fit() però guarda snapshots de l'error angular a cada interval."""
+    def fit(self, npy_file_path, snapshot_dir='snapshots_tin', snapshot_interval=10):
+        """Executa l'ajust incremental i guarda snapshots del TIN."""
         if not self._load_data(npy_file_path):
             return None, None
 
-        os.makedirs(snapshot_dir, exist_ok=True)
-        print(f"Les imatges d'error es guardaran a: {snapshot_dir}/  [mode={self.mode}]")
+        if snapshot_dir:
+            os.makedirs(snapshot_dir, exist_ok=True)
+            print(f"Les imatges del TIN es guardaran a: {snapshot_dir}/  [mode={self.mode}, control={self.control_mode}]")
 
         candidate_indices = self._initialize_tin()
 
         iteration = 0
         new_xy = None
 
-        while len(self.tin.points) < self.target_point_count and len(candidate_indices) > 0:
+        while True:
+            if len(candidate_indices) == 0:
+                print("\nProcés completat. No queden candidats.")
+                break
+
+            if self.control_mode == 'POINT_COUNT' and len(self.tin.points) >= self.target_point_count:
+                print(f"\nProcés completat (MODO PUNTS). Punts assolits: {len(self.tin.points)}")
+                break
+
             iteration += 1
 
             worst_local, worst_global = self._select_next(candidate_indices)
+            max_error = None
+            max_error_threshold = None
+            metric_label = None
+
+            if self.control_mode == 'ERROR':
+                max_error, max_error_threshold, metric_label = self._get_max_error_and_threshold(candidate_indices)
+                if max_error <= max_error_threshold:
+                    print(
+                        f"\nProcés completat (MODO ERROR). "
+                        f"Error final [{metric_label}]: {max_error:.4f} "
+                        f"(llindar: {max_error_threshold:.4f}, objectiu: {self.target_error_percentage:.2f}%)"
+                    )
+                    break
+
+            new_xy, new_z = self._get_coords_from_index(worst_global)
+
+            self.tin.add_points([new_xy])
+            self.tin_z_values.append(new_z)
+            candidate_indices.pop(worst_local)
+
+            if snapshot_dir and (iteration % snapshot_interval == 0):
+                self._save_snapshot(iteration, new_xy, snapshot_dir)
+
+            if iteration % 10 == 0:
+                if max_error is None:
+                    max_error, _, metric_label = self._get_max_error_and_threshold(candidate_indices)
+                if self.error_metric == 'angular':
+                    error_pct = (max_error / 180.0) * 100
+                else:
+                    error_pct = (max_error / self.elevation_range) * 100 if self.elevation_range > 0 else 0.0
+                print(
+                    f"[{self.mode}] Iter {iteration}: "
+                    f"error_max [{metric_label}] = {max_error:.4f} ({error_pct:.2f}%), "
+                    f"punts = {len(self.tin.points)}"
+                )
+
+        if snapshot_dir and new_xy is not None:
+            self._save_snapshot(iteration, new_xy, snapshot_dir)
+
+        return self.tin.points, self.tin.simplices
+
+    def fit_with_error_snapshots(self, npy_file_path,
+                                 snapshot_dir='snapshots_error_pendent',
+                                 snapshot_interval=10):
+        """Igual que fit() però guarda snapshots de l'error angular a cada interval."""
+        if not self._load_data(npy_file_path):
+            return None, None
+
+        os.makedirs(snapshot_dir, exist_ok=True)
+        print(f"Les imatges d'error es guardaran a: {snapshot_dir}/  [mode={self.mode}, control={self.control_mode}]")
+
+        candidate_indices = self._initialize_tin()
+
+        iteration = 0
+        new_xy = None
+
+        while True:
+            if len(candidate_indices) == 0:
+                print("\nProcés completat. No queden candidats.")
+                break
+
+            if self.control_mode == 'POINT_COUNT' and len(self.tin.points) >= self.target_point_count:
+                print(f"\nProcés completat (MODO PUNTS). Punts assolits: {len(self.tin.points)}")
+                break
+
+            iteration += 1
+
+            worst_local, worst_global = self._select_next(candidate_indices)
+            max_error = None
+            max_error_threshold = None
+            metric_label = None
+
+            if self.control_mode == 'ERROR':
+                max_error, max_error_threshold, metric_label = self._get_max_error_and_threshold(candidate_indices)
+                if max_error <= max_error_threshold:
+                    print(
+                        f"\nProcés completat (MODO ERROR). "
+                        f"Error final [{metric_label}]: {max_error:.4f} "
+                        f"(llindar: {max_error_threshold:.4f}, objectiu: {self.target_error_percentage:.2f}%)"
+                    )
+                    break
 
             if iteration % 10 == 0:
                 angular = self._calculate_angular_error(candidate_indices)
                 max_err = angular[worst_local]
-                print(f"[{self.mode}] Iter {iteration}: error_angular_màx = {max_err:.2f}°, "
-                      f"punts = {len(self.tin.points)}")
+                if max_error is None:
+                    max_error, _, metric_label = self._get_max_error_and_threshold(candidate_indices)
+                if self.error_metric == 'angular':
+                    error_pct = (max_error / 180.0) * 100
+                else:
+                    error_pct = (max_error / self.elevation_range) * 100 if self.elevation_range > 0 else 0.0
+                print(
+                    f"[{self.mode}] Iter {iteration}: "
+                    f"error_angular_màx = {max_err:.2f}°, "
+                    f"error_max [{metric_label}] = {max_error:.4f} ({error_pct:.2f}%), "
+                    f"punts = {len(self.tin.points)}"
+                )
 
             new_xy, new_z = self._get_coords_from_index(worst_global)
 
@@ -556,14 +725,15 @@ if __name__ == "__main__":
     # --- Mode mean_normal (NOU) ---
     converter = GridToTinIncremental(
         step=1, pixel_size=2.0, target_point_count=500,
-        mode='triangle'
+        mode='mean_normal', control_mode='ERROR', target_error_percentage=5,
+        error_metric='angular'
     )
 
     t0 = time.perf_counter()
     verts, triangles = converter.fit(
         'bassiero.npy',
         snapshot_dir='snapshots_tin_triangle',
-        snapshot_interval=1
+        snapshot_interval=10
     )
     t1 = time.perf_counter()
     print(f"Temps total [{converter.mode}]: {t1 - t0:.2f} segons")

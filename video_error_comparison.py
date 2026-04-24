@@ -441,7 +441,7 @@ def main():
     parser.add_argument('--target-points', type=int, default=2000, help='Nombre de punts objectiu')
     parser.add_argument('--algorithm', choices=['pendent6', 'pendent7'], default='pendent6',
                         help='Algoritme incremental per comparar amb original.py')
-    parser.add_argument('--p7-mode', choices=['point', 'triangle', 'mean_normal'], default='triangle',
+    parser.add_argument('--p7-mode', choices=['point', 'triangle', 'mean_normal'], default='mean_normal',
                         help='Mode de pendent7 (només s\'usa amb --algorithm pendent7)')
     parser.add_argument('--snapshot-interval', type=int, default=5,
                         help='Cada quantes iteracions es guarda un frame')
@@ -521,19 +521,19 @@ def main():
         algorithm = 'pendent7',
         p7_mode=args.p7_mode,
         metric='height',
-        output_dir="snapshots_error_pendent7.1_height",
+        output_dir="snapshots_error_pendent7.2_height",
         snapshot_interval=args.snapshot_interval,
         vmin=height_vmin,
         vmax=height_vmax,
         log_interval=args.log_interval,
     )
 
-    height_video = "video_error_comparison_error_height_7.1.mp4"
+    height_video = "video_error_comparison_error_height_7.2.mp4"
     create_side_by_side_video(dir_original_height, dir_pendent_height, height_video)
 
     print()
     print('✓ PROCÉS COMPLETAT')
-    print(f"  Vídeo angular: {angular_video}")
+    #print(f"  Vídeo angular: {angular_video}")
     print(f"  Vídeo alçada: {height_video}")
     print(f"  Escala angular: vmin={angular_vmin}, vmax={angular_vmax}")
     print(f"  Escala alçada: vmin={height_vmin}, vmax={height_vmax}")
