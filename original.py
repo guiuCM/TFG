@@ -80,6 +80,10 @@ class GridToTinConverter:
         
         iteration = 1
         while True:
+            if not P_indices:
+                print("\nProcés completat. S'han afegit tots els punts disponibles.")
+                break
+
             current_S_points_2d = self.all_points_3d[S_indices, :2]
             current_S_points_z = self.all_points_3d[S_indices, 2]
 
@@ -102,11 +106,8 @@ class GridToTinConverter:
             if max_err <= max_error_threshold:
                 print(f"\nProcés completat (MODO ERROR). Error final: {max_err:.2f}")
                 break
-            if len(S_indices) >= max_points_threshold:
+            if self.control_mode == 'POINT_COUNT' and len(S_indices) >= max_points_threshold:
                 print(f"\nProcés completat (MODO PUNTS). Punts assolits: {len(S_indices)}")
-                break
-            if not P_indices:
-                print("\nProcés completat. S'han afegit tots els punts.")
                 break
             
             # Continuar: Afegir el pitjor punt al TIN
@@ -309,7 +310,7 @@ if __name__ == "__main__":
     )
 
     t0 = time.perf_counter()
-    tin_builder_error.fit('bassiero.npy')
+    tin_builder_error.fit('terrain4x4_poc_pendent.npy')
     t1 = time.perf_counter()
     print(f"Temps total (carrega + refinament): {t1 - t0:.2f} s")
     tin_builder_error.plot()

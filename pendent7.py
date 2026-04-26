@@ -725,13 +725,13 @@ if __name__ == "__main__":
     # --- Mode mean_normal (NOU) ---
     converter = GridToTinIncremental(
         step=1, pixel_size=2.0, target_point_count=500,
-        mode='mean_normal', control_mode='ERROR', target_error_percentage=5,
+        mode='mean_normal', control_mode='ERROR', target_error_percentage=0,
         error_metric='angular'
     )
 
     t0 = time.perf_counter()
     verts, triangles = converter.fit(
-        'bassiero.npy',
+        'terrain4x4_poc_pendent.npy',
         snapshot_dir='snapshots_tin_triangle',
         snapshot_interval=10
     )

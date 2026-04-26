@@ -25,8 +25,8 @@ def calculate_stats_for_model(model_tin, h_grid, rows, cols, step, pixel_size):
     
     # Pendent real (magnitud del gradient)
     dy, dx = np.gradient(h_grid, spacing, spacing)
-    real_slope = np.sqrt(dx**2 + dy**2).ravel()
-    
+    real_slope = np.arctan(np.sqrt(dx**2 + dy**2).ravel())
+
     ids = simplex_ids
     slopes = real_slope
     
