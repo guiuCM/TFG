@@ -100,8 +100,7 @@ class GridToTinConverter:
             
             point_to_add_global_index = P_indices[max_err_local_index]
             
-            if iteration % 10 == 0:
-                print(f"  Iter. {iteration}: Punts TIN = {len(S_indices)}, Error Màx. Actual = {max_err:.2f}")
+            print(f"Iter. {iteration}: Punts TIN = {len(S_indices)}, Error Màx. Actual = {max_err:.6f}")
 
             if max_err <= max_error_threshold:
                 print(f"\nProcés completat (MODO ERROR). Error final: {max_err:.2f}")
@@ -306,11 +305,11 @@ if __name__ == "__main__":
         step=1,
         pixel_size=2.0,
         control_mode='POINT_COUNT',
-        target_point_count=2000  # Volem un TIN amb 2000 punts
+        target_point_count=50  # Volem un TIN amb 2000 punts
     )
 
     t0 = time.perf_counter()
-    tin_builder_error.fit('terrain4x4_poc_pendent.npy')
+    tin_builder_error.fit('terrain_5x5_greedy_trap2.npy')
     t1 = time.perf_counter()
     print(f"Temps total (carrega + refinament): {t1 - t0:.2f} s")
     tin_builder_error.plot()

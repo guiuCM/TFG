@@ -447,18 +447,17 @@ class GridToTinIncremental:
             if snapshot_dir and (iteration % snapshot_interval == 0):
                 self._save_snapshot(iteration, new_xy, snapshot_dir)
 
-            if iteration % 10 == 0:
-                if max_error is None:
-                    max_error, _, metric_label = self._get_max_error_and_threshold(candidate_indices)
-                if self.error_metric == 'angular':
-                    error_pct = (max_error / 180.0) * 100
-                else:
-                    error_pct = (max_error / self.elevation_range) * 100 if self.elevation_range > 0 else 0.0
-                print(
-                    f"[{self.mode}] Iter {iteration}: "
-                    f"error_max [{metric_label}] = {max_error:.4f} ({error_pct:.2f}%), "
-                    f"punts = {len(self.tin.points)}"
-                )
+            if max_error is None:
+                max_error, _, metric_label = self._get_max_error_and_threshold(candidate_indices)
+            if self.error_metric == 'angular':
+                error_pct = (max_error / 180.0) * 100
+            else:
+                error_pct = (max_error / self.elevation_range) * 100 if self.elevation_range > 0 else 0.0
+            print(
+                f"[{self.mode}] Iter {iteration}: "
+                f"error_max [{metric_label}] = {max_error:.4f} ({error_pct:.2f}%), "
+                f"punts = {len(self.tin.points)}"
+            )
 
         if snapshot_dir and new_xy is not None:
             self._save_snapshot(iteration, new_xy, snapshot_dir)
@@ -506,21 +505,20 @@ class GridToTinIncremental:
                     )
                     break
 
-            if iteration % 10 == 0:
-                angular = self._calculate_angular_error(candidate_indices)
-                max_err = angular[worst_local]
-                if max_error is None:
-                    max_error, _, metric_label = self._get_max_error_and_threshold(candidate_indices)
-                if self.error_metric == 'angular':
-                    error_pct = (max_error / 180.0) * 100
-                else:
-                    error_pct = (max_error / self.elevation_range) * 100 if self.elevation_range > 0 else 0.0
-                print(
-                    f"[{self.mode}] Iter {iteration}: "
-                    f"error_angular_màx = {max_err:.2f}°, "
-                    f"error_max [{metric_label}] = {max_error:.4f} ({error_pct:.2f}%), "
-                    f"punts = {len(self.tin.points)}"
-                )
+            angular = self._calculate_angular_error(candidate_indices)
+            max_err = angular[worst_local]
+            if max_error is None:
+                max_error, _, metric_label = self._get_max_error_and_threshold(candidate_indices)
+            if self.error_metric == 'angular':
+                error_pct = (max_error / 180.0) * 100
+            else:
+                error_pct = (max_error / self.elevation_range) * 100 if self.elevation_range > 0 else 0.0
+            print(
+                f"[{self.mode}] Iter {iteration}: "
+                f"error_angular_màx = {max_err:.2f}°, "
+                f"error_max [{metric_label}] = {max_error:.4f} ({error_pct:.2f}%), "
+                f"punts = {len(self.tin.points)}"
+            )
 
             new_xy, new_z = self._get_coords_from_index(worst_global)
 
@@ -724,14 +722,14 @@ if __name__ == "__main__":
 
     # --- Mode mean_normal (NOU) ---
     converter = GridToTinIncremental(
-        step=1, pixel_size=2.0, target_point_count=500,
-        mode='mean_normal', control_mode='ERROR', target_error_percentage=0,
+        step=1, pixel_size=2.0, target_point_count=16,
+        mode='mean_normal', control_mode='ERROR', target_error_percentage=0.5,
         error_metric='angular'
     )
 
     t0 = time.perf_counter()
     verts, triangles = converter.fit(
-        'terrain4x4_poc_pendent.npy',
+        'terrain_5x5_greedy_trap2.npy',
         snapshot_dir='snapshots_tin_triangle',
         snapshot_interval=10
     )

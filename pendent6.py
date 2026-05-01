@@ -526,10 +526,10 @@ class GridToTinIncremental:
         plt.show()
 
 if __name__ == "__main__":
-    converter = GridToTinIncremental(step=1, pixel_size=2.0, target_point_count=500)
+    converter = GridToTinIncremental(step=1, pixel_size=2.0, target_point_count=17)
     
     t0 = time.perf_counter()
-    verts, triangles = converter.fit('bassiero.npy', snapshot_dir='snapshots_tin_pendent_video', snapshot_interval=1)
+    verts, triangles = converter.fit('terrain_5x5_greedy_trap2.npy', snapshot_dir='snapshots_tin_pendent_video', snapshot_interval=1)
     t1 = time.perf_counter()
     print(f"Temps total: {t1 - t0:.2f} segons")
  
