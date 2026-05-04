@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
+from matplotlib.path import Path
 from scipy.spatial import Delaunay
 import time
 import os  #Per crear carpetes
@@ -42,6 +43,7 @@ class GridToTinIncremental:
         nx = -dz_dx
         ny = -dz_dy
         nz = 1
+        self.slope_grid = np.degrees(np.arctan(np.sqrt(nx**2 + ny**2) / nz))
         
         norm = np.sqrt(nx**2 + ny**2 + nz**2)
         self.normal_grid = np.dstack((nx/norm, ny/norm, nz/norm))
@@ -61,35 +63,25 @@ class GridToTinIncremental:
         
         simplex_ids = self.tin.find_simplex(coords)
         
-        # Agafem els índexs dels vèrtexs dels triangles
         tris_indices = self.tin.simplices[simplex_ids]
         tris_xy = self.tin.points[tris_indices]
         tris_z = np.array(self.tin_z_values)[tris_indices]
         
-        # Agafem els 3 vertexs de cada triangle
         p0 = np.column_stack((tris_xy[:, 0, 0], tris_xy[:, 0, 1], tris_z[:, 0]))
         p1 = np.column_stack((tris_xy[:, 1, 0], tris_xy[:, 1, 1], tris_z[:, 1]))
         p2 = np.column_stack((tris_xy[:, 2, 0], tris_xy[:, 2, 1], tris_z[:, 2]))
-        
-        # Calculem la Normal del Triangle
         u = p1 - p0
         v = p2 - p0
         tin_normals = np.cross(u, v)
         
-        # Normalitzem els vectors del TIN
         norms = np.linalg.norm(tin_normals, axis=1, keepdims=True)
-        tin_normals = tin_normals / norms 
-        #podria donar error de divisió per zero?
-        #tin_normals = tin_normals / np.maximum(norms, 1e-10)
+        tin_normals = tin_normals / norms
         
         # Assegurem que la Z sempre apunti amunt
         flip_vec = tin_normals[:, 2] < 0
         tin_normals[flip_vec] *= -1
         
-        # CÀLCUL DE L'ERROR ANGULAR
         dot_product = np.einsum('ij,ij->i', real_normals, tin_normals) # Producte escalar
-        
-        # Limitar dot_product a [-1, 1] per evitar errors numèrics
         dot_product = np.clip(dot_product, -1.0, 1.0)
         
         angles_rad = np.arccos(dot_product)
@@ -103,8 +95,6 @@ class GridToTinIncremental:
 
         points = self.tin.points
         simplices = self.tin.simplices
-        
-        # Coordenades dels 3 vèrtexs per a cada triangle: [N_triangles, 3, 2]
         tri_coords = points[simplices]
         
         x = tri_coords[:, :, 0]
@@ -119,7 +109,6 @@ class GridToTinIncremental:
     
     def _calculate_weighted_angular_error(self, candidate_indices):
 
-        # Error angular pur
         angular_errors = self._calculate_angular_error(candidate_indices)
         
         #Trobar a quin triangle pertany cada candidat
@@ -129,8 +118,6 @@ class GridToTinIncremental:
         coords = np.column_stack((x, y))
         
         simplex_ids = self.tin.find_simplex(coords)
-        
-        # Calcular àrees de tots els triangles
         all_areas = self._calculate_triangle_areas()
         
         #Assignar àrea corresponent a cada candidat
@@ -138,20 +125,18 @@ class GridToTinIncremental:
         valid_mask = simplex_ids != -1
         candidate_areas[valid_mask] = all_areas[simplex_ids[valid_mask]]
         
-        #Score = angular_error * sqrt(triangle_area)
+        #Score = angular_error * ponderació per àrea
         weighted_score = angular_errors * np.log(candidate_areas)
         
         return weighted_score
 
     def _get_coords_from_index(self, idx_flat):
-        # Converteix índex pla a coordenades X,Y i alçada Z
         r, c = divmod(idx_flat, self.cols)
         x = c * self.step * self.pixel_size
         y = r * self.step * self.pixel_size
         z = self.h_grid[r, c]
         return np.array([x, y]), z
 
-    # Calcula les normals de tots els triangles del TIN en vectors unitaris
     def _triangle_normals(self):
         tris = self.tin.simplices
         pts = self.tin.points
@@ -168,34 +153,83 @@ class GridToTinIncremental:
         n[flip] *= -1
         return n
 
+    def _triangle_median_slopes(self):
+        if self.tin is None or len(self.tin.simplices) == 0:
+            return np.array([])
+
+        rows_grid, cols_grid = np.indices((self.rows, self.cols))
+        x = cols_grid * self.step * self.pixel_size
+        y = rows_grid * self.step * self.pixel_size
+        sample_points = np.column_stack((x.ravel(), y.ravel()))
+        slope_values = self.slope_grid.ravel()
+
+        medians = np.empty(len(self.tin.simplices), dtype=float)
+        for tri_idx, simplex in enumerate(self.tin.simplices):
+            triangle = self.tin.points[simplex]
+            mask = Path(triangle).contains_points(sample_points, radius=1e-9)
+            if np.any(mask):
+                medians[tri_idx] = float(np.median(slope_values[mask]))
+            else:
+                p0 = np.array([triangle[0, 0], triangle[0, 1], self.tin_z_values[simplex[0]]])
+                p1 = np.array([triangle[1, 0], triangle[1, 1], self.tin_z_values[simplex[1]]])
+                p2 = np.array([triangle[2, 0], triangle[2, 1], self.tin_z_values[simplex[2]]])
+                normal = np.cross(p1 - p0, p2 - p0)
+                norm = np.linalg.norm(normal)
+                if norm > 1e-10:
+                    normal = normal / norm
+                    if normal[2] < 0:
+                        normal *= -1
+                    medians[tri_idx] = float(np.degrees(np.arctan(np.sqrt(normal[0]**2 + normal[1]**2) / (normal[2] + 1e-12))))
+                else:
+                    medians[tri_idx] = 0.0
+
+        return medians
+
 
     def _save_snapshot(self, iteration, last_point_xy, folder, vmin=2083, vmax=2902):
 
         if len(self.tin.simplices) == 0:
             return
-        fig = plt.figure(figsize=(10, 8))
-        ax = plt.gca()
+        fig, ax = plt.subplots(figsize=(10, 8))
+
+        median_slopes = self._triangle_median_slopes()
+        if len(median_slopes) == 0:
+            plt.close(fig)
+            return
+
+        slope_vmin = float(np.min(median_slopes))
+        slope_vmax = float(np.max(median_slopes))
+        if np.isclose(slope_vmin, slope_vmax):
+            slope_vmin -= 1e-9
+            slope_vmax += 1e-9
         
-        # Mapcolor amb elevació - ESCALA FIXA
-        tpc = ax.tripcolor(self.tin.points[:,0], self.tin.points[:,1], self.tin.simplices, 
-                           np.array(self.tin_z_values), cmap='terrain', shading='flat',
-                           vmin=vmin, vmax=vmax)
+        # Visualització per mostrar per mediana del pendent (així poder-la comparar amb el paper)
+        pts = self.tin.points
+        polys = [pts[simplex] for simplex in self.tin.simplices]
+        norm = Normalize(vmin=slope_vmin, vmax=slope_vmax)
+        cmap = plt.get_cmap('coolwarm')
+
+        poly_collection = PolyCollection(polys, cmap=cmap, norm=norm, edgecolors='black', linewidths=0.3)
+        poly_collection.set_array(median_slopes)
+
+        ax.add_collection(poly_collection)
+        ax.autoscale_view()
         
         ax.triplot(self.tin.points[:,0], self.tin.points[:,1], self.tin.simplices, 
                    'k-', linewidth=0.3, alpha=0.5)
         
-        # EMFATITZAR ÚLTIM PUNT
         ax.scatter(last_point_xy[0], last_point_xy[1], color='red', s=80, edgecolors='white', zorder=10, linewidths=2)
         
-        plt.colorbar(tpc, label='Elevació (m)')
-        plt.title(f"pendent6.py - Iter {iteration} | Punts: {len(self.tin.points)}", fontweight='bold')
+        sm = ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        fig.colorbar(sm, ax=ax, label='Mediana del pendent (graus)')
+        plt.title(f"pendent6.py - Iter {iteration} | Punts: {len(self.tin.points)} | Mediana pendent", fontweight='bold')
         plt.xlabel('X (m)')
         plt.ylabel('Y (m)')
         ax.set_xlim(0, 3000)
         ax.set_ylim(0, 3000)
         ax.set_aspect('equal', adjustable='box')
         
-        # Guardar fitxer
         filename = os.path.join(folder, f"frame_{iteration:04d}.png")
         plt.savefig(filename, dpi=100, bbox_inches='tight')
         plt.close(fig)
@@ -208,22 +242,12 @@ class GridToTinIncremental:
         fig = plt.figure(figsize=(10, 8))
         ax = plt.gca()
         
-        # Calcular pendents
         tri_normals = self._triangle_normals()
         nx = tri_normals[:, 0]
         ny = tri_normals[:, 1]
         nz = tri_normals[:, 2]
         slopes = np.degrees(np.arctan(np.sqrt(nx**2 + ny**2) / nz))
         
-        # print(f"Pendent: min={slopes.min():.4f}, max={slopes.max():.4f}, mean={slopes.mean():.4f}")
-        # for tri_idx, simplex in enumerate(self.tin.simplices):
-        #     z_vals = [self.tin_z_values[simplex[0]], self.tin_z_values[simplex[1]], self.tin_z_values[simplex[2]]]
-        #     print(f"  Triangle {tri_idx}: z = {z_vals}, pendent = {slopes[tri_idx]:.2f} graus")   
-        #     x_vals = self.tin.points[simplex, 0]
-        #     y_vals = self.tin.points[simplex, 1]
-        #     print(f"    Vèrtexs: ({x_vals[0]:.2f}, {y_vals[0]:.2f}), ({x_vals[1]:.2f}, {y_vals[1]:.2f}), ({x_vals[2]:.2f}, {y_vals[2]:.2f})")
-
-        #PolyCollection
         pts = self.tin.points
         polys = []
         for simplex in self.tin.simplices:
@@ -239,12 +263,10 @@ class GridToTinIncremental:
         ax.add_collection(poly_collection)
         ax.autoscale_view()
         
-        # Colorbar
         sm = ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array([])
         cbar = plt.colorbar(sm, ax=ax, label='Pendent (graus)')
         
-        # EMFATITZAR ÚLTIM PUNT
         ax.scatter(last_point_xy[0], last_point_xy[1], color='red', s=100, edgecolors='white', zorder=10, label='Nou Punt')
         
         plt.title(f"Iteració {iteration} | Punts: {len(self.tin.points)} | Pendent")
@@ -253,7 +275,6 @@ class GridToTinIncremental:
         plt.axis('equal')
         plt.legend()
         
-        # Guardar fitxer
         filename = os.path.join(folder, f"frame_slope_{iteration:04d}.png")
         plt.savefig(filename, dpi=100)
         plt.close(fig)
@@ -266,12 +287,9 @@ class GridToTinIncremental:
             print(f"Les imatges es guardaran a: {snapshot_dir}/")
         
         total_points = self.rows * self.cols
-        
-        # Inicialització: només les 4 cantonades
         corner_indices = [0, self.cols-1, (self.rows-1)*self.cols, total_points-1]
         candidate_indices = list(set(range(total_points)) - set(corner_indices))
 
-        # Obtenir els 4 punts de les cantonades
         initial_points_xy = []
         self.tin_z_values = []
         for idx in corner_indices:
@@ -295,16 +313,13 @@ class GridToTinIncremental:
         max_err_idx = int(np.argmax(residual))
         new_xy, new_z = self._get_coords_from_index(max_err_idx)
         
-        # Afegir el punt de màxim residual als punts inicials
         initial_points_xy.append(new_xy)
         self.tin_z_values.append(new_z)
         candidate_indices.remove(max_err_idx)
         
-        # Crear Delaunay amb 5 punts
+        # Crear Delaunay ja amb 5 punts
         self.tin = Delaunay(np.array(initial_points_xy), incremental=True)
-        
-        # print(f"Iteració 0: punts totals = {len(self.tin.points)}")
-                
+
         iteration = 0
         new_xy = None
         while len(self.tin.points) < self.target_point_count and len(candidate_indices) > 0:
@@ -331,18 +346,8 @@ class GridToTinIncremental:
             if snapshot_dir and (iteration % snapshot_interval == 0):
                 self._save_snapshot(iteration, new_xy, snapshot_dir)
             
-        # self._filter_erosion(max_len=self.step * self.pixel_size * 15)
-        
-        # Guardar l'última imatge per si iteration % snapshot_interval != 0
         if snapshot_dir and new_xy is not None:
             self._save_snapshot(iteration, new_xy, snapshot_dir)
-        
-        # VERIFICACIÓ: Comprovar si els punts i les Z estan sincronitzats
-        print(f"\n[DEBUG] Verificant sincronització punts-Z:")
-        print(f"  Nombre de punts XY al TIN: {len(self.tin.points)}")
-        print(f"  Nombre de valors Z: {len(self.tin_z_values)}")
-        if len(self.tin.points) != len(self.tin_z_values):
-            print("  ⚠️ ALERTA: Desincronització detectada!")
             
         return self.tin.points, self.tin.simplices
 
@@ -390,20 +395,19 @@ class GridToTinIncremental:
         while len(self.tin.points) < self.target_point_count and len(candidate_indices) > 0:
             iteration += 1
             
-            # Usar error ponderat per àrea
             weighted_errors = self._calculate_weighted_angular_error(candidate_indices)
             
             worst_local_idx = np.argmax(weighted_errors)
             worst_global_idx = candidate_indices[worst_local_idx]
             
-            # Calcular error angular pur per visualització
+            # Calcular error angular per la visualització
             angular_errors = self._calculate_angular_error(candidate_indices)
             max_error = angular_errors[worst_local_idx]
             
             if iteration % 10 == 0:
                 print(f"  Iter {iteration}: Error màx = {max_error:.2f}°")
             
-            # Generar snapshot d'error (usar errors angulars purs per visualització)
+            # Generar snapshot d'error
             if iteration % snapshot_interval == 0:
                 self._save_error_snapshot(snapshot_dir, iteration, candidate_indices, 
                                          angular_errors, worst_local_idx, spacing)
@@ -420,7 +424,7 @@ class GridToTinIncremental:
                             errors, max_err_idx, spacing):
         fig, ax = plt.subplots(figsize=(12, 10))
         
-        # Crear mapa d'error angular (mostrejat cada 5 píxels)
+        # Crear el mapa d'error angular
         sample_step = 5
         sample_rows = self.rows // sample_step
         sample_cols = self.cols // sample_step
@@ -437,26 +441,21 @@ class GridToTinIncremental:
                 else:
                     error_grid[sr, sc] = max(error_grid[sr, sc], errors[local_idx])
         
-        # Mostrar error com a heatmap
         im = ax.imshow(error_grid, extent=[0, self.cols*spacing, 0, self.rows*spacing], 
                        origin='lower', cmap='hot_r', vmin=0, vmax=180, 
                        interpolation='nearest', alpha=0.9)
         
-        # Dibuixar TIN actual
         ax.triplot(self.tin.points[:,0], self.tin.points[:,1], self.tin.simplices, 
                    color='cyan', linewidth=0.5, alpha=0.6)
         
-        # Marcar punts TIN
         ax.scatter(self.tin.points[:,0], self.tin.points[:,1], c='white', s=15, 
                    edgecolors='black', linewidths=0.5, zorder=5, alpha=0.8)
         
-        # Marcar últim punt afegit
         if len(self.tin.points) > 0:
             last_pt = self.tin.points[-1]
             ax.scatter(last_pt[0], last_pt[1], c='lime', s=100, 
                        edgecolors='white', linewidths=2, zorder=10, marker='*')
         
-        # Marcar punt amb màxim error
         if max_err_idx < len(candidate_indices):
             next_pt_idx = candidate_indices[max_err_idx]
             r = next_pt_idx // self.cols
@@ -509,29 +508,44 @@ class GridToTinIncremental:
         if self.tin is None or len(self.tin.simplices) == 0:
             print("No hi ha triangles per dibuixar")
             return
+
+        median_slopes = self._triangle_median_slopes()
+        if len(median_slopes) == 0:
+            print("No hi ha dades de pendent per dibuixar")
+            return
+
+        slope_vmin = float(np.min(median_slopes))
+        slope_vmax = float(np.max(median_slopes))
+        if np.isclose(slope_vmin, slope_vmax):
+            slope_vmin -= 1e-9
+            slope_vmax += 1e-9
         
-        # Calcular pendent per cada triangle a partir de les normals
-        tri_normals = self._triangle_normals()
-        # Pendent = arctan(sqrt(nx^2 + ny^2) / nz) en graus
-        slopes = np.degrees(np.arctan(np.sqrt(tri_normals[:, 0]**2 + tri_normals[:, 1]**2) / (tri_normals[:, 2] + 1e-12)))
-        
-        plt.figure(figsize=(10, 8))
-        ax = plt.gca()
-        tpc = ax.tripcolor(self.tin.points[:,0], self.tin.points[:,1], self.tin.simplices, 
-                           slopes, cmap='viridis', shading='flat')
+        fig, ax = plt.subplots(figsize=(10, 8))
+        pts = self.tin.points
+        polys = [pts[simplex] for simplex in self.tin.simplices]
+        norm = Normalize(vmin=slope_vmin, vmax=slope_vmax)
+        cmap = plt.get_cmap('coolwarm')
+
+        poly_collection = PolyCollection(polys, cmap=cmap, norm=norm, edgecolors='black', linewidths=0.2)
+        poly_collection.set_array(median_slopes)
+
+        ax.add_collection(poly_collection)
+        ax.autoscale_view()
         ax.triplot(self.tin.points[:,0], self.tin.points[:,1], self.tin.simplices, 'k-', linewidth=0.2)
-        plt.colorbar(tpc, label='Pendent (graus)')
-        plt.title(f"TIN Final - Pendent (Punts: {len(self.tin.points)})")
-        plt.axis('equal')
+        sm = ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        fig.colorbar(sm, ax=ax, label='Mediana del pendent (graus)')
+        ax.set_title(f"TIN Final - Mediana pendent (Punts: {len(self.tin.points)})")
+        ax.set_aspect('equal', adjustable='box')
         plt.show()
 
 if __name__ == "__main__":
-    converter = GridToTinIncremental(step=1, pixel_size=2.0, target_point_count=500)
+    converter = GridToTinIncremental(step=1, pixel_size=2.0, target_point_count=1000)
     
     t0 = time.perf_counter()
-    verts, triangles = converter.fit('bassiero.npy', snapshot_dir='snapshots_tin_pendent_video', snapshot_interval=1)
+    verts, triangles = converter.fit('bassiero.npy', snapshot_dir='snapshots_comparacio_oscar_6.3', snapshot_interval=1)
     t1 = time.perf_counter()
     print(f"Temps total: {t1 - t0:.2f} segons")
  
     converter.plot()
-    converter.plot2()  # Mostra també el pendent
+    converter.plot2()
