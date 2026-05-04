@@ -485,19 +485,19 @@ def main():
     #     log_interval=args.log_interval,
     # )
 
-    dir_pendent_angular = generate_pendent_error_snapshots(
-        args.npy,
-        args.target_points,
-        algorithm=args.algorithm,
-        p7_mode=args.p7_mode,
-        metric='angular',
-        output_dir='snapshots_error_pendent_p7.2',
-        snapshot_interval=args.snapshot_interval,
-        vmin=angular_vmin,
-        vmax=angular_vmax,
-        log_interval=args.log_interval,
-        )
-    #dir_pendent_angular = 'snapshots_error_pendent_p7.1'  # Placeholder per no generar aquest vídeo ara
+    # dir_pendent_angular = generate_pendent_error_snapshots(
+    #     args.npy,
+    #     args.target_points,
+    #     algorithm=args.algorithm,
+    #     p7_mode=args.p7_mode,
+    #     metric='angular',
+    #     output_dir='snapshots_error_pendent_p7.2',
+    #     snapshot_interval=args.snapshot_interval,
+    #     vmin=angular_vmin,
+    #     vmax=angular_vmax,
+    #     log_interval=args.log_interval,
+    #     )
+    dir_pendent_angular = 'snapshots_error_pendent_p7.2'  # Placeholder per no generar aquest vídeo ara
 
     angular_video = "video_error_comparison_error_angular_7.2.mp4"
     create_side_by_side_video(dir_original_angular, dir_pendent_angular, angular_video)
