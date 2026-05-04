@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
+from matplotlib.path import Path
 from scipy.spatial import Delaunay
 import time
 import os  #Per crear carpetes
@@ -42,6 +43,7 @@ class GridToTinIncremental:
         nx = -dz_dx
         ny = -dz_dy
         nz = 1
+        self.slope_grid = np.degrees(np.arctan(np.sqrt(nx**2 + ny**2) / nz))
         
         norm = np.sqrt(nx**2 + ny**2 + nz**2)
         self.normal_grid = np.dstack((nx/norm, ny/norm, nz/norm))
@@ -168,18 +170,67 @@ class GridToTinIncremental:
         n[flip] *= -1
         return n
 
+    def _triangle_median_slopes(self):
+        if self.tin is None or len(self.tin.simplices) == 0:
+            return np.array([])
+
+        rows_grid, cols_grid = np.indices((self.rows, self.cols))
+        x = cols_grid * self.step * self.pixel_size
+        y = rows_grid * self.step * self.pixel_size
+        sample_points = np.column_stack((x.ravel(), y.ravel()))
+        slope_values = self.slope_grid.ravel()
+
+        medians = np.empty(len(self.tin.simplices), dtype=float)
+        for tri_idx, simplex in enumerate(self.tin.simplices):
+            triangle = self.tin.points[simplex]
+            mask = Path(triangle).contains_points(sample_points, radius=1e-9)
+            if np.any(mask):
+                medians[tri_idx] = float(np.median(slope_values[mask]))
+            else:
+                p0 = np.array([triangle[0, 0], triangle[0, 1], self.tin_z_values[simplex[0]]])
+                p1 = np.array([triangle[1, 0], triangle[1, 1], self.tin_z_values[simplex[1]]])
+                p2 = np.array([triangle[2, 0], triangle[2, 1], self.tin_z_values[simplex[2]]])
+                normal = np.cross(p1 - p0, p2 - p0)
+                norm = np.linalg.norm(normal)
+                if norm > 1e-10:
+                    normal = normal / norm
+                    if normal[2] < 0:
+                        normal *= -1
+                    medians[tri_idx] = float(np.degrees(np.arctan(np.sqrt(normal[0]**2 + normal[1]**2) / (normal[2] + 1e-12))))
+                else:
+                    medians[tri_idx] = 0.0
+
+        return medians
+
 
     def _save_snapshot(self, iteration, last_point_xy, folder, vmin=2083, vmax=2902):
 
         if len(self.tin.simplices) == 0:
             return
-        fig = plt.figure(figsize=(10, 8))
-        ax = plt.gca()
+        fig, ax = plt.subplots(figsize=(10, 8))
+
+        median_slopes = self._triangle_median_slopes()
+        if len(median_slopes) == 0:
+            plt.close(fig)
+            return
+
+        slope_vmin = float(np.min(median_slopes))
+        slope_vmax = float(np.max(median_slopes))
+        if np.isclose(slope_vmin, slope_vmax):
+            slope_vmin -= 1e-9
+            slope_vmax += 1e-9
         
-        # Mapcolor amb elevació - ESCALA FIXA
-        tpc = ax.tripcolor(self.tin.points[:,0], self.tin.points[:,1], self.tin.simplices, 
-                           np.array(self.tin_z_values), cmap='terrain', shading='flat',
-                           vmin=vmin, vmax=vmax)
+        # Cada regió es pinta amb la mediana dels pendents que conté
+        pts = self.tin.points
+        polys = [pts[simplex] for simplex in self.tin.simplices]
+        norm = Normalize(vmin=slope_vmin, vmax=slope_vmax)
+        cmap = plt.get_cmap('coolwarm')
+
+        poly_collection = PolyCollection(polys, cmap=cmap, norm=norm, edgecolors='black', linewidths=0.3)
+        poly_collection.set_array(median_slopes)
+
+        ax.add_collection(poly_collection)
+        ax.autoscale_view()
         
         ax.triplot(self.tin.points[:,0], self.tin.points[:,1], self.tin.simplices, 
                    'k-', linewidth=0.3, alpha=0.5)
@@ -187,8 +238,10 @@ class GridToTinIncremental:
         # EMFATITZAR ÚLTIM PUNT
         ax.scatter(last_point_xy[0], last_point_xy[1], color='red', s=80, edgecolors='white', zorder=10, linewidths=2)
         
-        plt.colorbar(tpc, label='Elevació (m)')
-        plt.title(f"pendent6.py - Iter {iteration} | Punts: {len(self.tin.points)}", fontweight='bold')
+        sm = ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        fig.colorbar(sm, ax=ax, label='Mediana del pendent (graus)')
+        plt.title(f"pendent6.py - Iter {iteration} | Punts: {len(self.tin.points)} | Mediana pendent", fontweight='bold')
         plt.xlabel('X (m)')
         plt.ylabel('Y (m)')
         ax.set_xlim(0, 3000)
@@ -509,27 +562,42 @@ class GridToTinIncremental:
         if self.tin is None or len(self.tin.simplices) == 0:
             print("No hi ha triangles per dibuixar")
             return
+
+        median_slopes = self._triangle_median_slopes()
+        if len(median_slopes) == 0:
+            print("No hi ha dades de pendent per dibuixar")
+            return
+
+        slope_vmin = float(np.min(median_slopes))
+        slope_vmax = float(np.max(median_slopes))
+        if np.isclose(slope_vmin, slope_vmax):
+            slope_vmin -= 1e-9
+            slope_vmax += 1e-9
         
-        # Calcular pendent per cada triangle a partir de les normals
-        tri_normals = self._triangle_normals()
-        # Pendent = arctan(sqrt(nx^2 + ny^2) / nz) en graus
-        slopes = np.degrees(np.arctan(np.sqrt(tri_normals[:, 0]**2 + tri_normals[:, 1]**2) / (tri_normals[:, 2] + 1e-12)))
-        
-        plt.figure(figsize=(10, 8))
-        ax = plt.gca()
-        tpc = ax.tripcolor(self.tin.points[:,0], self.tin.points[:,1], self.tin.simplices, 
-                           slopes, cmap='viridis', shading='flat')
+        fig, ax = plt.subplots(figsize=(10, 8))
+        pts = self.tin.points
+        polys = [pts[simplex] for simplex in self.tin.simplices]
+        norm = Normalize(vmin=slope_vmin, vmax=slope_vmax)
+        cmap = plt.get_cmap('coolwarm')
+
+        poly_collection = PolyCollection(polys, cmap=cmap, norm=norm, edgecolors='black', linewidths=0.2)
+        poly_collection.set_array(median_slopes)
+
+        ax.add_collection(poly_collection)
+        ax.autoscale_view()
         ax.triplot(self.tin.points[:,0], self.tin.points[:,1], self.tin.simplices, 'k-', linewidth=0.2)
-        plt.colorbar(tpc, label='Pendent (graus)')
-        plt.title(f"TIN Final - Pendent (Punts: {len(self.tin.points)})")
-        plt.axis('equal')
+        sm = ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        fig.colorbar(sm, ax=ax, label='Mediana del pendent (graus)')
+        ax.set_title(f"TIN Final - Mediana pendent (Punts: {len(self.tin.points)})")
+        ax.set_aspect('equal', adjustable='box')
         plt.show()
 
 if __name__ == "__main__":
-    converter = GridToTinIncremental(step=1, pixel_size=2.0, target_point_count=17)
+    converter = GridToTinIncremental(step=1, pixel_size=2.0, target_point_count=1000)
     
     t0 = time.perf_counter()
-    verts, triangles = converter.fit('terrain_5x5_greedy_trap2.npy', snapshot_dir='snapshots_tin_pendent_video', snapshot_interval=1)
+    verts, triangles = converter.fit('bassiero.npy', snapshot_dir='snapshots_comparacio_oscar_6.3', snapshot_interval=1)
     t1 = time.perf_counter()
     print(f"Temps total: {t1 - t0:.2f} segons")
  

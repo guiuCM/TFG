@@ -56,7 +56,8 @@ def interpolate_tin_heights(tin, z_values, rows, cols, step, pixel_size):
 def calculate_slope_from_heights(h_grid, spacing):
     #Calcula el pendent (magnitud del gradient) a partir d'una matriu d'alçades.
     dy, dx = np.gradient(h_grid, spacing, spacing)
-    return np.sqrt(dx**2 + dy**2)
+    # retornem l'angle de pendent en graus (more human-readable)
+    return np.degrees(np.arctan(np.sqrt(dx**2 + dy**2)))
 
 
 def calculate_slope_from_tin_normals(tin, z_values, rows, cols, step, pixel_size):
@@ -94,9 +95,9 @@ def calculate_slope_from_tin_normals(tin, z_values, rows, cols, step, pixel_size
     flip = normals[:, 2] < 0
     normals[flip] *= -1
     
-    # Calcular pendent per cada triangle: slope = sqrt(nx² + ny²) / nz
-    # Atenció: això és magnitud del gradient, equivalent a tan(angle)
-    triangle_slopes = np.sqrt(normals[:, 0]**2 + normals[:, 1]**2) / (normals[:, 2] + 1e-10)
+    # Calcular pendent per cada triangle com a tangent i convertir a angle en graus
+    triangle_slopes_tan = np.sqrt(normals[:, 0]**2 + normals[:, 1]**2) / (normals[:, 2] + 1e-10)
+    triangle_slopes = np.degrees(np.arctan(triangle_slopes_tan))
     
     # Assignar pendent del triangle a cada píxel
     slopes_flat = np.full(len(query_xy), np.nan)
@@ -139,16 +140,16 @@ def plot_comparison_colormaps(h_grid_real, h_grid_tin, slope_real, slope_tin, ti
     plt.colorbar(im3, ax=axes[0, 2], label='Diferència (m)')
     
     # --- Fila 2: Pendents ---
-    # Pendent real
+    # Pendent real (ara en graus)
     vmax_slope = max(np.nanmax(slope_real), np.nanmax(slope_tin))
     im4 = axes[1, 0].imshow(slope_real, cmap='viridis', origin='lower', vmin=0, vmax=vmax_slope)
     axes[1, 0].set_title('Pendent Real')
-    plt.colorbar(im4, ax=axes[1, 0], label='Pendent (m/m)')
+    plt.colorbar(im4, ax=axes[1, 0], label='Pendent (°)')
     
-    # Pendent TIN
+    # Pendent TIN (calculat a partir de normals, en graus)
     im5 = axes[1, 1].imshow(slope_tin, cmap='viridis', origin='lower', vmin=0, vmax=vmax_slope)
     axes[1, 1].set_title('Pendent TIN')
-    plt.colorbar(im5, ax=axes[1, 1], label='Pendent (m/m)')
+    plt.colorbar(im5, ax=axes[1, 1], label='Pendent (°)')
     
     # Diferència de pendents (centrada a 0)
     max_diff_s = np.nanmax(np.abs(diff_slope))

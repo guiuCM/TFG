@@ -23,9 +23,10 @@ def calculate_stats_for_model(model_tin, h_grid, rows, cols, step, pixel_size):
     # Trobar triangle per a cada punt
     simplex_ids = model_tin.find_simplex(query_xy)
     
-    # Pendent real (magnitud del gradient)
+    # Pendent real (magnitud del gradient). Convertim a graus per humanitzar
     dy, dx = np.gradient(h_grid, spacing, spacing)
-    real_slope = np.arctan(np.sqrt(dx**2 + dy**2).ravel())
+    # primer calculem la pendent com a tangent (m/m), després transformem a angle en graus
+    real_slope = np.degrees(np.arctan(np.sqrt(dx**2 + dy**2))).ravel()
 
     ids = simplex_ids
     slopes = real_slope
@@ -63,10 +64,9 @@ if __name__ == "__main__":
     means_h, stds_h = calculate_stats_for_model(converter_h.tin, 
                                                  h_grid_h, rows_h, cols_h, STEP, PIXEL_SIZE)
     
-    # pendent.py
-    MODE_PENDENT7 = 'mean_normal'  # canvia a 'point' o 'triangle' per comparar altres modes
+    # pendent7.py (sense mode, pendent7 no en te)
     t0 = time.perf_counter()
-    converter_a = GridToTinIncremental(step=STEP, pixel_size=PIXEL_SIZE, target_point_count=TARGET_POINTS, mode=MODE_PENDENT7)
+    converter_a = GridToTinIncremental(step=STEP, pixel_size=PIXEL_SIZE, target_point_count=TARGET_POINTS)
     verts, triangles = converter_a.fit(FILENAME)
     t1 = time.perf_counter()
     print(f"   Temps: {t1 - t0:.2f}s, Punts: {len(converter_a.tin.points)}")
@@ -77,29 +77,29 @@ if __name__ == "__main__":
     #boxplots
     print("\n>> Generant boxplots...")
     fig = plt.figure(figsize=(14, 6))
-    plt.suptitle(f"Comparació original.py vs Pendent7.py [{MODE_PENDENT7}] ({TARGET_POINTS} punts, step={STEP})", fontsize=14)
+    plt.suptitle(f"Comparacio original.py vs pendent7.py ({TARGET_POINTS} punts, step={STEP})", fontsize=14)
     
     # Mitjana Pendent
     ax1 = plt.subplot(1, 2, 1)
-    bp1 = ax1.boxplot([means_h, means_a], labels=['original (Alçada)', f'Pendent7 [{MODE_PENDENT7}]'], patch_artist=True)
+    bp1 = ax1.boxplot([means_h, means_a], labels=['original (Alçada)', 'pendent7'], patch_artist=True)
     colors = ['lightblue', 'lightcoral']
     for patch, color in zip(bp1['boxes'], colors):
         patch.set_facecolor(color)
     ax1.scatter([1] * len(means_h), means_h, alpha=0.3, s=20, color='blue')
     ax1.scatter([2] * len(means_a), means_a, alpha=0.3, s=20, color='red')
     ax1.set_title("Mitjana Pendent per Triangle", fontsize=12)
-    ax1.set_ylabel("Pendent mig")
+    ax1.set_ylabel("Pendent mig (graus)")
     ax1.grid(True, alpha=0.3)
     
     # Desviació Estàndard
     ax2 = plt.subplot(1, 2, 2)
-    bp2 = ax2.boxplot([stds_h, stds_a], labels=['original (Alçada)', f'Pendent7 [{MODE_PENDENT7}]'], patch_artist=True)
+    bp2 = ax2.boxplot([stds_h, stds_a], labels=['original (Alçada)', 'pendent7'], patch_artist=True)
     for patch, color in zip(bp2['boxes'], colors):
         patch.set_facecolor(color)
     ax2.scatter([1] * len(stds_h), stds_h, alpha=0.3, s=20, color='blue')
     ax2.scatter([2] * len(stds_a), stds_a, alpha=0.3, s=20, color='red')
     ax2.set_title("Desviació Estàndard Pendent (Consistència)", fontsize=12)
-    ax2.set_ylabel("Std Dev Pendent")
+    ax2.set_ylabel("Std Dev Pendent (graus)")
     ax2.grid(True, alpha=0.3)
     
     plt.tight_layout()
@@ -113,7 +113,7 @@ if __name__ == "__main__":
     print(f"{'MÈTRICA':<20} | {'Mitjana (mín-màx)':<25} | {'Std (mín-màx)':<25}")
     print("-"*60)
     print(f"{'original (Alçada)':<20} | {np.mean(means_h):.3f} ({np.min(means_h):.3f}-{np.max(means_h):.3f}) | {np.mean(stds_h):.3f} ({np.min(stds_h):.3f}-{np.max(stds_h):.3f})")
-    print(f"{f'Pendent7 [{MODE_PENDENT7}]':<20} | {np.mean(means_a):.3f} ({np.min(means_a):.3f}-{np.max(means_a):.3f}) | {np.mean(stds_a):.3f} ({np.min(stds_a):.3f}-{np.max(stds_a):.3f})")
+    print(f"{'pendent7':<20} | {np.mean(means_a):.3f} ({np.min(means_a):.3f}-{np.max(means_a):.3f}) | {np.mean(stds_a):.3f} ({np.min(stds_a):.3f}-{np.max(stds_a):.3f})")
     print("="*60)
     
     plt.show()
