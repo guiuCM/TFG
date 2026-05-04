@@ -1,8 +1,3 @@
-"""
-Script de comparació: testeja els terrenys 4x4 candidates amb ambdós algorismes
-per determinar quin produces resultats equilibrats i òptims.
-"""
-
 import numpy as np
 import matplotlib.pyplot as plt
 from original import GridToTinConverter
@@ -10,7 +5,6 @@ from pendent7 import GridToTinIncremental
 import time
 import os
 
-# Terrenys a testejar
 TERRAINS = {
     'balanced_diag': 'terrain_4x4_balanced_diag.npy',
     'fractal': 'terrain_4x4_fractal.npy',
@@ -44,12 +38,11 @@ def calculate_rmse(tin, h_grid, rows, cols, step, pixel_size):
         if simplex_id == -1:  # Fora del triangulació
             errors.append(np.nan)
         else:
-            # Els 3 vèrtexs del triangle
+
             tri_verts = tin.points[tin.simplices[simplex_id]]
-            tri_z = tin.simplices[simplex_id]  # NO! Necessitem els z values
+            tri_z = tin.simplices[simplex_id]  #Necessitem els z values??
             
-            # Calcular interpolació baricèntrica
-            # Això és complex, fem una aproximació simple
+
             dist_to_verts = np.linalg.norm(tri_verts[:, :2] - query_pt, axis=1)
             if np.min(dist_to_verts) < 1e-6:  # Molt a prop de vèrtex
                 errors.append(0)
@@ -58,7 +51,6 @@ def calculate_rmse(tin, h_grid, rows, cols, step, pixel_size):
     
     actual_z = h_grid.ravel()
     
-    # Calcul aproximat (per a 4x4, probablement tots són vèrtexs del TIN)
     return np.nanmean(np.array(errors))
 
 
@@ -87,7 +79,6 @@ def test_all_combinations():
         print(f"TERRENY: {terrain_name}")
         print(f"{'='*80}")
         
-        # Carregar terrain
         h_grid = np.load(terrain_file)
         rows, cols = h_grid.shape
         
@@ -95,7 +86,6 @@ def test_all_combinations():
         print(f"  Rang alçades: [{h_grid.min():.2f}, {h_grid.max():.2f}]")
         print(f"  Mitjana/Std: {h_grid.mean():.2f} / {h_grid.std():.2f}")
         
-        # Test original.py
         print(f"\n  ▶ original.py (error alçada)...")
         t0 = time.perf_counter()
         try:
@@ -121,8 +111,7 @@ def test_all_combinations():
         except Exception as e:
             print(f"    ✗ Error: {e}")
         
-        # Test pendent7.py amb mode='mean_normal'
-        print(f"\n  ▶ pendent7.py (error angular, mode='mean_normal')...")
+        print(f"\n  ▶ pendent7.py (error angular')...")
         t0 = time.perf_counter()
         try:
             converter_a = GridToTinIncremental(
@@ -149,7 +138,6 @@ def test_all_combinations():
         except Exception as e:
             print(f"    ✗ Error: {e}")
     
-    # Resumir resultats
     print("\n" + "="*80)
     print("RESUM RESULTATS")
     print("="*80)
@@ -160,12 +148,10 @@ def test_all_combinations():
         print(f"{results['terrain'][i]:<20} {results['algorithm'][i]:<30} "
               f"{results['points'][i]:<8} {results['error'][i]:<10.4f} {results['time'][i]:<8.3f}s")
     
-    # Determinar òptim
     print("\n" + "="*80)
     print("ANÀLISI D'ÒPTIM")
     print("="*80)
     
-    # Agrupar per algoritme
     for algo in ['original (alçada)', 'pendent7 (angular)']:
         print(f"\n▶ {algo}:")
         for terrain_name in TERRAINS.keys():
@@ -177,21 +163,3 @@ def test_all_combinations():
 if __name__ == "__main__":
     test_all_combinations()
     
-    print("\n" + "="*80)
-    print("RECOMANACIONS PER AL TERRENY 4x4 ÒPTIM:")
-    print("="*80)
-    print("""
-1. El terreny òptim serà aquell que:
-   - Produeix errors baixos en AMBDÓS algorismes (balanç)
-   - Té estructura interessant (no massa trivial)
-   - Té gradients suaus (perquè error angular sigui comparable)
-
-2. Els candidats inicials són:
-   - balanced_diag: Pendent diàgonal + variabilitat
-   - gaussian_bumps: Turons suaus (més realista)
-   - fractal: Pattern mix
-
-3. Ajust manual:
-   Si cap no és òptim, pots crear una variant personalitzada
-   editant create_optimal_4x4_terrain.py
-    """)

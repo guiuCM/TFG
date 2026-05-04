@@ -1,18 +1,3 @@
-#!/usr/bin/env python3
-"""
-TERRENY 4x4 ÒPTIM PER A AMBDÓS ALGORISMES
-==========================================
-
-Després de testar múltiples candidates, el terreny òptim és:
-terrain_4x4_gaussian_bumps.npy
-
-Características:
-- Turons gaussians suaus (realisme)
-- Variabilitat espacial interessant
-- Gradient suau (error angular controlat)
-- Comportament equilibrat en ambdós algorismes
-"""
-
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -23,27 +8,19 @@ def create_final_optimal_terrain():
     Funciona molt bé tant per a error alçada com per a error angular
     """
     
-    # Crear grid de coordenades
     x = np.linspace(0, 4, 4)
     y = np.linspace(0, 4, 4)
     xx, yy = np.meshgrid(x, y)
     
-    # Base suau (pendent general)
     base = 2.0
     
-    # Turó 1: Pic alt al centre-esquerra (realista)
     turon1 = 2.5 * np.exp(-((xx - 1)**2 + (yy - 1)**2) / 0.5)
-    
-    # Turó 2: Pic més suau al centre-dreta
     turon2 = 1.8 * np.exp(-((xx - 3)**2 + (yy - 3)**2) / 0.7)
-    
-    # Vall negativa per contrast
     vall = -1.0 * np.exp(-((xx - 3)**2 + (yy - 1)**2) / 0.5)
     
-    # Pendent suau de fons (representa inclinació general)
     pendent_base = 0.5 * (xx + yy)
     
-    # Combinar tots els components
+    # Combinar tot
     terrain = base + turon1 + turon2 + vall + pendent_base
     terrain = terrain.astype(np.float32)
     
@@ -64,7 +41,6 @@ def analyze_terrain(terrain):
     print(f"  Mitjana: {terrain.mean():.3f} m")
     print(f"  Desviació Estàndard: {terrain.std():.3f} m")
     
-    # Calcular gradients
     dy, dx = np.gradient(terrain)
     slopes = np.sqrt(dx**2 + dy**2)
     
@@ -74,7 +50,6 @@ def analyze_terrain(terrain):
     print(f"  Mitjana: {slopes.mean():.3f}")
     print(f"  Desviació Estàndard: {slopes.std():.3f}")
     
-    # Calcular normals del grid
     nx = -dx
     ny = -dy
     nz = np.ones_like(dx)
@@ -90,7 +65,6 @@ def analyze_terrain(terrain):
 
 
 def visualize_terrain(terrain):
-    """Visualitza el terreny en 3D"""
     
     fig = plt.figure(figsize=(16, 5))
     
@@ -98,7 +72,6 @@ def visualize_terrain(terrain):
     y = np.arange(4)
     xx, yy = np.meshgrid(x, y)
     
-    # Subplot 1: 3D Surface
     ax1 = fig.add_subplot(1, 3, 1, projection='3d')
     surf = ax1.plot_surface(xx, yy, terrain, cmap='terrain', 
                             edgecolor='k', linewidth=1, alpha=0.9,
@@ -111,13 +84,11 @@ def visualize_terrain(terrain):
     ax1.set_zlabel('Alçada (m)')
     fig.colorbar(surf, ax=ax1, label='Alçada (m)')
     
-    # Subplot 2: 2D Heatmap
     ax2 = fig.add_subplot(1, 3, 2)
     im = ax2.imshow(terrain, cmap='terrain', extent=[0, 4, 0, 4], 
                     origin='lower', interpolation='nearest')
     ax2.scatter(xx.ravel(), yy.ravel(), c='red', s=100, edgecolors='black', linewidths=1, zorder=5)
     
-    # Afegir text amb valors
     for i in range(4):
         for j in range(4):
             ax2.text(j + 0.5, i + 0.5, f'{terrain[i, j]:.1f}', 
@@ -131,7 +102,6 @@ def visualize_terrain(terrain):
     ax2.set_yticks([0, 1, 2, 3, 4])
     fig.colorbar(im, ax=ax2, label='Alçada (m)')
     
-    # Subplot 3: Estadísticas
     ax3 = fig.add_subplot(1, 3, 3)
     ax3.axis('off')
     
@@ -173,23 +143,17 @@ Recomanat per:
 
 if __name__ == "__main__":
     
-    # Crear el terreny òptim
     terrain = create_final_optimal_terrain()
-    
-    # Analitzar
     slopes, normals = analyze_terrain(terrain)
     
-    # Visualitzar
     print("\n" + "="*70)
     print("GENERANT VISUALITZACIÓ 3D...")
     print("="*70)
     visualize_terrain(terrain)
     
-    # Guardar com a fitxer principal
     np.save('terrain_4x4_optimal.npy', terrain)
     print("\n✓ Terreny guardat com: terrain_4x4_optimal.npy")
     
-    # Guardar la descripció
     with open('TERRENY_4X4_OPTIMAL_README.txt', 'w') as f:
         f.write("""
 TERRENY 4x4 ÒPTIM PARA AMBDÓS ALGORISMES

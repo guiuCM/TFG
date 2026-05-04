@@ -8,18 +8,10 @@ from scipy.spatial import Delaunay
 import time
 import os
 
-# MODES DE SELECCIÓ
-# 'point'       : pendent6 original – tria el punt candidat amb major error ponderat (error * sqrt(àrea))
-# 'triangle'    : pendent7 nou      – tria el triangle amb major (mean_error * sqrt(àrea)),
-#                i dins d'ell escull el punt candidat amb major error angular pur
-# 'mean_normal' : nou              – per a cada triangle calcula la normal mitjana de tots els
-#                candidats interiors, mesura l'error angular TIN↔normal_mitjana,
-#                tria el triangle amb score màxim i insereix el candidat més proper al centroide
-
 class GridToTinIncremental:
 
     def __init__(self, step=25, pixel_size=2.0, target_point_count=500,
-                 mode='mean_normal', control_mode='POINT_COUNT', target_error_percentage=5,
+                 mode='point', control_mode='POINT_COUNT', target_error_percentage=5,
                  error_metric='angular'):
         assert mode in ('point', 'triangle', 'mean_normal'), \
             "mode ha de se 'point', 'triangle' o 'mean_normal'"
@@ -48,7 +40,6 @@ class GridToTinIncremental:
         self.tin_z_values = []
 
     def _get_max_error_and_threshold(self, candidate_indices):
-        """Retorna error màxim actual, llindar i etiqueta segons la mètrica escollida."""
         if self.error_metric == 'angular':
             errors = self._calculate_angular_error(candidate_indices)
             max_error = float(np.max(errors)) if len(errors) > 0 else 0.0
@@ -194,7 +185,6 @@ class GridToTinIncremental:
         return np.degrees(np.arccos(dot))
 
     def _calculate_height_error(self, candidate_indices):
-        """Error d'alçada absolut entre la quadrícula i el pla del triangle del TIN."""
         candidate_indices_arr = np.asarray(candidate_indices)
         if len(candidate_indices_arr) == 0:
             return np.array([])
@@ -234,7 +224,7 @@ class GridToTinIncremental:
         errors[valid] = np.abs(real_z - z_pred)
         return errors
 
-    # MODE 'point' (pendent 6)
+    # MODE 'point' (optimitzacions 1-3)
     def _calculate_weighted_angular_error(self, candidate_indices):
         """Score = angular_error * sqrt(àrea_triangle) — mode 'point'."""
         angular_errors = self._calculate_angular_error(candidate_indices)
@@ -246,7 +236,7 @@ class GridToTinIncremental:
         valid = simplex_ids != -1
         candidate_areas[valid] = all_areas[simplex_ids[valid]]
 
-        return angular_errors * candidate_areas
+        return angular_errors * np.log(candidate_areas)
 
     def _select_worst_point(self, candidate_indices):
         """Mode 'point': retorna (local_idx, global_idx) del pitjor candidat."""
@@ -270,11 +260,9 @@ class GridToTinIncremental:
         _, simplex_ids = self._find_simplex_for_candidates(candidate_indices_arr)
         all_areas = self._calculate_triangle_areas()
 
-        # Candidats que pertanyen a algun triangle
         valid_mask = simplex_ids != -1
 
-        if not np.any(valid_mask):
-            # Fallback: cap punt dins de cap triangle (no hauria de passar)
+        if not np.any(valid_mask): # Si cap candidat és dins el TIN, hauria de tornar el de major error angular pur però no passa pq inicialitzo 4 cantonades
             worst_local = int(np.argmax(angular_errors))
             return worst_local, int(candidate_indices_arr[worst_local])
 
@@ -292,26 +280,14 @@ class GridToTinIncremental:
                 best_score = score
                 best_tri = tri_id
 
-        # Dins del triangle guanyador, el pitjor punt
         tri_mask = simplex_ids == best_tri
         local_indices_in_tri = np.where(tri_mask)[0]  # índexs locals dins candidate_indices
         best_in_tri = local_indices_in_tri[int(np.argmax(angular_errors[tri_mask]))]
 
         return int(best_in_tri), int(candidate_indices_arr[best_in_tri])
 
-    # MODE 'mean_normal' : normal mitjana del triangle + punt central
+    # MODE 'mean_normal'
     def _select_worst_by_mean_normal(self, candidate_indices):
-        """
-        1. Agrupa els candidats per triangle.
-        2. Per a cada triangle, calcula la normal mitjana de totes les normals
-           de la quadrícula dels candidats que hi cauen.
-        3. Calcula l'error angular entre la normal del TIN i la normal mitjana.
-        4. Score = error_angular * sqrt(àrea).
-        5. Tria el triangle amb score màxim.
-        6. Dins del triangle, retorna el candidat més proper al centroide.
-
-        Retorna (local_idx, global_idx).
-        """
         candidate_indices_arr = np.asarray(candidate_indices)
 
         rows, cols = np.divmod(candidate_indices_arr, self.cols)
@@ -322,14 +298,13 @@ class GridToTinIncremental:
         simplex_ids = self.tin.find_simplex(coords)
         valid_mask = simplex_ids != -1
 
-        # Fallback: si cap punt és dins el TIN
-        if not np.any(valid_mask):
+        if not np.any(valid_mask):# Si cap candidat és dins el TIN, no passa
             angular_errors = self._calculate_angular_error(candidate_indices_arr)
             worst_local = int(np.argmax(angular_errors))
             return worst_local, int(candidate_indices_arr[worst_local])
 
         all_areas = self._calculate_triangle_areas()
-        tin_normals = self._triangle_normals()  # (n_tris, 3)
+        tin_normals = self._triangle_normals()
 
         unique_tris = np.unique(simplex_ids[valid_mask])
 
@@ -339,16 +314,15 @@ class GridToTinIncremental:
 
         for tri_id in unique_tris:
             mask = simplex_ids == tri_id
-            # Normals de la quadrícula dels candidats dins el triangle
             r_in, c_in = rows[mask], cols[mask]
-            grid_normals_in = self.normal_grid[r_in, c_in]  # (k, 3)
+            grid_normals_in = self.normal_grid[r_in, c_in]
             mean_n = grid_normals_in.mean(axis=0)
             norm_len = np.linalg.norm(mean_n)
             if norm_len < 1e-10:
                 continue
             mean_n /= norm_len
 
-            tin_n = tin_normals[tri_id]  # (3,)
+            tin_n = tin_normals[tri_id]
             dot = float(np.clip(np.dot(tin_n, mean_n), -1.0, 1.0))
             angle_err = np.degrees(np.arccos(dot))
 
@@ -363,11 +337,10 @@ class GridToTinIncremental:
             worst_local = int(np.argmax(angular_errors))
             return worst_local, int(candidate_indices_arr[worst_local])
 
-        # Centroide del triangle guanyador
-        tri_verts_xy = self.tin.points[self.tin.simplices[best_tri]]  # (3, 2)
-        centroid = tri_verts_xy.mean(axis=0)  # (2,)
+        # Centroide del triangle
+        tri_verts_xy = self.tin.points[self.tin.simplices[best_tri]]
+        centroid = tri_verts_xy.mean(axis=0)
 
-        # Candidats dins el triangle guanyador
         tri_mask = simplex_ids == best_tri
         local_indices_in_tri = np.where(tri_mask)[0]
         coords_in_tri = coords[tri_mask]  # (k, 2)
@@ -379,9 +352,6 @@ class GridToTinIncremental:
 
         return int(best_local), int(candidate_indices_arr[best_local])
 
-    # ------------------------------------------------------------------
-    # Dispatcher: tria la funció de selecció segons el mode
-    # ------------------------------------------------------------------
 
     def _select_next(self, candidate_indices):
         if self.mode == 'point':
@@ -390,10 +360,6 @@ class GridToTinIncremental:
             return self._select_worst_by_triangle(candidate_indices)
         else:  # 'mean_normal'
             return self._select_worst_by_mean_normal(candidate_indices)
-
-    # ------------------------------------------------------------------
-    # Inicialització comuna (cantonades + punt de màxim residu)
-    # ------------------------------------------------------------------
 
     def _initialize_tin(self):
         """Crea el TIN inicial amb les 4 cantonades i el punt de màxim residu."""
@@ -408,7 +374,6 @@ class GridToTinIncremental:
             initial_points_xy.append(xy)
             self.tin_z_values.append(z)
 
-        # Punt de màxim residu respecte el pla de les cantonades
         corner_rows, corner_cols = np.divmod(corner_indices, self.cols)
         corner_z = self.h_grid[corner_rows, corner_cols]
         A = np.c_[corner_cols, corner_rows, np.ones(len(corner_indices))]
@@ -429,9 +394,6 @@ class GridToTinIncremental:
         self.tin = Delaunay(np.array(initial_points_xy), incremental=True)
         return candidate_indices
 
-    # ------------------------------------------------------------------
-    # Mètode principal: fit
-    # ------------------------------------------------------------------
 
     def fit(self, npy_file_path, snapshot_dir='snapshots_tin', snapshot_interval=10):
         """Executa l'ajust incremental i guarda snapshots del TIN."""
@@ -570,11 +532,6 @@ class GridToTinIncremental:
             self._save_angular_error_snapshot(
             snapshot_dir, iteration, candidate_indices, -1, self.tin.points[-1])
 
-        print(f"\n[DEBUG] Punts XY: {len(self.tin.points)} | Valors Z: {len(self.tin_z_values)}")
-        if len(self.tin.points) != len(self.tin_z_values):
-            print("  ⚠️ ALERTA: Desincronització detectada!")
-
-        print(f"✓ Snapshots d'error guardats a {snapshot_dir}/")
         return self.tin.points, self.tin.simplices
 
     def _save_angular_error_snapshot(self, snapshot_dir, iteration,
@@ -589,7 +546,7 @@ class GridToTinIncremental:
         
         fig, ax = plt.subplots(figsize=(12, 10))
         
-        # Crear mapa d'error angular (mostrejat cada 5 píxels) - igual que pendent6
+        # Crear mapa d'error angular
         sample_step = 5
         sample_rows = self.rows // sample_step
         sample_cols = self.cols // sample_step
@@ -606,7 +563,6 @@ class GridToTinIncremental:
                 else:
                     error_grid[sr, sc] = max(error_grid[sr, sc], angular_errors[local_idx])
         
-        # Mostrar error com a heatmap
         im = ax.imshow(error_grid, extent=[0, self.cols*spacing, 0, self.rows*spacing], 
                        origin='lower', cmap='hot_r', vmin=0, vmax=180, 
                        interpolation='nearest', alpha=0.9)
@@ -615,16 +571,13 @@ class GridToTinIncremental:
         ax.triplot(self.tin.points[:, 0], self.tin.points[:, 1], self.tin.simplices,
                    color='cyan', linewidth=0.5, alpha=0.6)
         
-        # Marcar punts TIN
         ax.scatter(self.tin.points[:, 0], self.tin.points[:, 1],
                    c='white', s=15, edgecolors='black', linewidths=0.5, zorder=5, alpha=0.8)
         
-        # Marcar últim punt afegit
         if len(self.tin.points) > 0:
             ax.scatter(last_point_xy[0], last_point_xy[1],
                        c='lime', s=100, edgecolors='white', linewidths=2, zorder=10, marker='*')
         
-        # Marcar punt amb màxim error
         if 0 <= worst_local < len(candidate_indices):
             nr, nc = divmod(candidate_indices[worst_local], self.cols)
             ax.scatter(nc * spacing, nr * spacing,
@@ -645,9 +598,6 @@ class GridToTinIncremental:
         plt.savefig(filename, dpi=100, bbox_inches='tight')
         plt.close()
 
-    # ------------------------------------------------------------------
-    # Snapshots
-    # ------------------------------------------------------------------
 
     def _save_snapshot(self, iteration, last_point_xy, folder, vmin=2083, vmax=2902):
         if len(self.tin.simplices) == 0:
@@ -749,9 +699,6 @@ class GridToTinIncremental:
         plt.savefig(filename, dpi=100)
         plt.close(fig)
 
-    # ------------------------------------------------------------------
-    # Visualització final
-    # ------------------------------------------------------------------
 
     def plot(self):
         if self.tin is None or len(self.tin.simplices) == 0:
@@ -808,7 +755,6 @@ class GridToTinIncremental:
         plt.show()
 
 
-# ======================================================================
 if __name__ == "__main__":
 
     converter = GridToTinIncremental(

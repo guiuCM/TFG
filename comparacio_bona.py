@@ -8,30 +8,24 @@ import time
 FILENAME = 'bassiero.npy'
 STEP = 1
 PIXEL_SIZE = 2.0
-TARGET_POINTS = 500
-
+TARGET_POINTS = 2000
 def calculate_stats_for_model(model_tin, h_grid, rows, cols, step, pixel_size):
     spacing = step * pixel_size
     
-    # Grella de coordenades
     r_indices, c_indices = np.arange(rows), np.arange(cols)
     rr, cc = np.meshgrid(r_indices, c_indices, indexing='ij')
     x_coords = cc.ravel() * spacing
     y_coords = rr.ravel() * spacing
     query_xy = np.column_stack((x_coords, y_coords))
     
-    # Trobar triangle per a cada punt
     simplex_ids = model_tin.find_simplex(query_xy)
     
-    # Pendent real (magnitud del gradient). Convertim a graus per humanitzar
     dy, dx = np.gradient(h_grid, spacing, spacing)
-    # primer calculem la pendent com a tangent (m/m), després transformem a angle en graus
     real_slope = np.degrees(np.arctan(np.sqrt(dx**2 + dy**2))).ravel()
 
     ids = simplex_ids
     slopes = real_slope
     
-    # Agrupar per ID de triangle
     order = np.argsort(ids)
     ids_sorted = ids[order]
     slopes_sorted = slopes[order]
@@ -49,14 +43,13 @@ def calculate_stats_for_model(model_tin, h_grid, rows, cols, step, pixel_size):
 if __name__ == "__main__":
     
     print("COMPARACIÓ original.PY vs PENDENT.PY\n")
-    # original.py
+    # Alçada
     t0 = time.perf_counter()
     converter_h = GridToTinConverter(step=STEP, control_mode='POINT_COUNT', target_point_count=TARGET_POINTS)
     converter_h.fit(FILENAME)
     t1 = time.perf_counter()
     print(f"   Temps: {t1 - t0:.2f}s, Punts: {len(converter_h.final_points_3d)}, Error final: {converter_h.final_error:.2f}m")
     
-    # Carrega grid
     h_full = np.load(FILENAME)
     h_grid_h = h_full[::STEP, ::STEP]
     rows_h, cols_h = h_grid_h.shape
@@ -64,7 +57,7 @@ if __name__ == "__main__":
     means_h, stds_h = calculate_stats_for_model(converter_h.tin, 
                                                  h_grid_h, rows_h, cols_h, STEP, PIXEL_SIZE)
     
-    # pendent7.py (sense mode, pendent7 no en te)
+    # pendent
     t0 = time.perf_counter()
     converter_a = GridToTinIncremental(step=STEP, pixel_size=PIXEL_SIZE, target_point_count=TARGET_POINTS)
     verts, triangles = converter_a.fit(FILENAME)
@@ -106,7 +99,6 @@ if __name__ == "__main__":
     plt.savefig('comparacio_simple.png', dpi=150)
     print("✓ Gràfica guardada: 'comparacio_simple.png'")
     
-    # Report
     print("\n" + "="*60)
     print("ESTADÍSTIQUES DELS BOXPLOTS")
     print("="*60)

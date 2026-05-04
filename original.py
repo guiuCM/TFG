@@ -26,8 +26,6 @@ class GridToTinConverter:
         self.rows = 0
         self.cols = 0
         self.slope_grid = None
-        
-        # Resultats
         self.final_points_3d = None
         self.tin = None
         self.final_error = 0.0
@@ -40,14 +38,10 @@ class GridToTinConverter:
             print(f"Error: No s'ha trobat '{npy_file_path}'")
             return
             
-        #print(f"Elevació Mín: {h.min()}, Elevació Màx: {h.max()}")
         self.elevation_range = h.max() - h.min()
-        
-        # Submostreig igual que pendent6.py
         h_sampled = h[::self.step, ::self.step]
         self.rows, self.cols = h_sampled.shape
         
-        # Sistema de coordenades igual que pendent6.py
         spacing = self.step * self.pixel_size
         r_indices = np.arange(self.rows)
         c_indices = np.arange(self.cols)
@@ -61,10 +55,9 @@ class GridToTinConverter:
         
         self.all_points_3d = np.vstack([xx.ravel(), yy.ravel(), h_sampled.ravel()]).T
         self.num_total_points = self.all_points_3d.shape[0]
-        #print(f"Grid submostrejat a {self.num_total_points} punts (step={self.step}).")
 
     def _triangle_median_slopes(self, temp_tin):
-        """Calcula la mediana dels pendents per a cada triangle del TIN."""
+        #Calcula la mediana dels pendents per a cada triangle del TIN. (per la visualització)
         if temp_tin is None or len(temp_tin.simplices) == 0:
             return np.array([])
 
@@ -106,17 +99,15 @@ class GridToTinConverter:
         
         if self.control_mode == 'ERROR':
             max_error_threshold = (self.target_error_percentage / 100.0) * self.elevation_range
-            #print(f"MODO: Límit per Error. Objectiu: {max_error_threshold:.2f} unitats")
         elif self.control_mode == 'POINT_COUNT':
-            max_error_threshold = 0.0 # Error 0, mai s'assolirà
+            max_error_threshold = 0.1 # Per evitar bucles infinits
             max_points_threshold = self.target_point_count
-            #print(f"MODO: Límit per Punts. Objectiu: {max_points_threshold} vèrtexs.")
         else:
             raise ValueError("control_mode ha de ser 'ERROR' o 'POINT_COUNT'")
 
         corner_indices = [0, self.cols - 1, (self.rows - 1) * self.cols, self.rows * self.cols - 1]
-        S_indices = list(set(corner_indices)) # Punts al TIN (índexs)
-        P_indices = list(set(range(self.num_total_points)) - set(S_indices)) # Punts candidats
+        S_indices = list(set(corner_indices))
+        P_indices = list(set(range(self.num_total_points)) - set(S_indices))
         
         
         iteration = 1
@@ -150,11 +141,9 @@ class GridToTinConverter:
                 print(f"\nProcés completat (MODO PUNTS). Punts assolits: {len(S_indices)}")
                 break
             
-            # Continuar: Afegir el pitjor punt al TIN
             S_indices.append(point_to_add_global_index)
             P_indices.pop(max_err_local_index)
             
-            # Generar snapshot si cal
             if snapshot_dir and iteration % snapshot_interval == 0:
                 self._save_snapshot(snapshot_dir, iteration, S_indices)
             
@@ -163,15 +152,12 @@ class GridToTinConverter:
 
         self.final_points_3d = self.all_points_3d[S_indices]
         self.tin = Delaunay(self.final_points_3d[:, :2])
-        #print(f"TIN final generat amb {len(self.final_points_3d)} vèrtexs.")
 
     def fit_with_error_snapshots(self, npy_file_path, snapshot_dir='snapshots_error_original', snapshot_interval=5):
 
         self._load_and_sample_grid(npy_file_path)
         
         os.makedirs(snapshot_dir, exist_ok=True)
-        
-        # Carregar grid original per visualització
         h_full = np.load(npy_file_path)
         
         max_points_threshold = self.target_point_count
@@ -203,7 +189,6 @@ class GridToTinConverter:
             if iteration % 10 == 0:
                 print(f"  Iter {iteration}: Error màx = {max_err:.2f}m")
             
-            # Generar snapshot d'error
             if iteration % snapshot_interval == 0:
                 self._save_error_snapshot(snapshot_dir, iteration, S_indices, P_indices, 
                                          errors, max_err_local_index, spacing)
@@ -218,8 +203,6 @@ class GridToTinConverter:
     def _save_error_snapshot(self, snapshot_dir, iteration, S_indices, P_indices, 
                             errors, max_err_idx, spacing):
         fig, ax = plt.subplots(figsize=(12, 10))
-        
-        # Crear mapa d'error (mostrejat cada 5 píxels)
         sample_step = 5
         sample_rows = self.rows // sample_step
         sample_cols = self.cols // sample_step
@@ -236,28 +219,23 @@ class GridToTinConverter:
                 else:
                     error_grid[sr, sc] = max(error_grid[sr, sc], errors[local_idx])
         
-        # Mostrar error com a heatmap
         im = ax.imshow(error_grid, extent=[0, self.cols*spacing, 0, self.rows*spacing], 
                        origin='lower', cmap='hot_r', vmin=0, vmax=400, 
                        interpolation='nearest', alpha=0.9)
         
-        # Dibuixar TIN actual
         current_points = self.all_points_3d[S_indices]
         tin = Delaunay(current_points[:, :2])
         ax.triplot(tin.points[:,0], tin.points[:,1], tin.simplices, 
                    color='cyan', linewidth=0.5, alpha=0.6)
         
-        # Marcar punts TIN
         ax.scatter(tin.points[:,0], tin.points[:,1], c='white', s=15, 
                    edgecolors='black', linewidths=0.5, zorder=5, alpha=0.8)
         
-        # Marcar últim punt afegit
         if len(S_indices) > 0:
             last_pt = current_points[-1]
             ax.scatter(last_pt[0], last_pt[1], c='lime', s=100, 
                        edgecolors='white', linewidths=2, zorder=10, marker='*')
         
-        # Marcar punt amb màxim error
         if max_err_idx < len(P_indices):
             next_pt_idx = P_indices[max_err_idx]
             next_pt = self.all_points_3d[next_pt_idx]
@@ -297,7 +275,7 @@ class GridToTinConverter:
         width = self.cols * spacing
         height = self.rows * spacing
 
-        # Rotate coordinates to match pendent7.py visualization
+        # Girar per tenir la mateixa forma en la visualització
         pts_rot = np.column_stack((pts[:, 1], width - pts[:, 0]))
         polys = [pts_rot[simplex] for simplex in temp_tin.simplices]
         norm = Normalize(vmin=slope_vmin, vmax=slope_vmax)
@@ -309,10 +287,7 @@ class GridToTinConverter:
         ax.add_collection(poly_collection)
         ax.autoscale_view()
 
-        # Dibuixar edges amb coordenades rotades
         ax.triplot(pts_rot[:, 0], pts_rot[:, 1], temp_tin.simplices, 'k-', linewidth=0.3, alpha=0.5)
-
-        # Últim punt afegit en vermell (rotat)
         if len(S_indices) > 0:
             last_pt = current_points[-1]
             last_x_rot = last_pt[1]
@@ -356,8 +331,6 @@ class GridToTinConverter:
         spacing = self.step * self.pixel_size
         width = self.cols * spacing
         height = self.rows * spacing
-
-        # Rotate coordinates to match pendent7.py visualization
         pts_rot = np.column_stack((pts[:, 1], width - pts[:, 0]))
         polys = [pts_rot[simplex] for simplex in self.tin.simplices]
         norm = Normalize(vmin=slope_vmin, vmax=slope_vmax)
@@ -382,22 +355,11 @@ class GridToTinConverter:
 
 
 if __name__ == "__main__":
-    
-
-    # tin_builder_points = GridToTinConverter(
-    #     step=20,  # Un 'step' més baix dona més punts per escollir
-    #     pixel_size=2.0,
-    #     control_mode='POINT_COUNT',
-    #     target_point_count=700  # Volem un TIN amb 700 punts
-    # )
-    # tin_builder_points.fit('bassiero.npy')
-    # tin_builder_points.plot()
-
     tin_builder_error = GridToTinConverter(
         step=1,
         pixel_size=2.0,
         control_mode='POINT_COUNT',
-        target_point_count=1000  # Volem un TIN amb 2000 punts
+        target_point_count=1000
     )
 
     t0 = time.perf_counter()
