@@ -1,26 +1,33 @@
 # GRID-TIN Navigation Mesh Generator
 
-Aquest projecte és part d'un Treball de Final de Grau (TFG) de la Facultat d'Informàtica de Barcelona (FIB). L'objectiu principal és desenvolupar un algorisme eficient per a la generació de malles de navegació a partir de mapes d'alçades (heightfields) en entorns exteriors complexos.
+An efficient Python algorithm for generating optimized Navigation Meshes from heightmaps (heightfields) in complex outdoor environments. 
 
-## Descripció
-El sistema implementa una estratègia incremental de GRID a TIN (Triangulated Irregular Network) que transforma mapes d'alçades en xarxes de triangles optimitzades. A diferència dels mètodes tradicionals, aquest enfocament permet una representació més precisa del terreny per a la navegació d'agents intel·ligents en videojocs o simulacions, optimitzant la densitat de triangles basant-se en l'error del pendent.
+The system implements an incremental **GRID to TIN (Triangulated Irregular Network)** strategy that transforms raw height matrices into highly optimized polygonal networks. Unlike traditional methods, this approach provides a much more accurate terrain representation for intelligent agents in video games and simulations by dynamically optimizing triangle density based on slope error.
 
-## Característiques principals
-- **Conversió GRID-TIN:** Transformació de matrius d'alçades (heightfields) a malles poligonals optimitzades.
-- **Estratègia Incremental:** Us d'un algorisme voraç (greedy).
-- **Optimització Geomètrica:** Ús de la triangulació de Delaunay per garantir triangles ben condicionats i evitar la formació de triangles "estella" o "slivers".
-- **Anàlisi Semàntica:** Comparativa de mètriques d'error (RMSE, MAE i Error Màxim) entre l'alçada i el pendent amb els diferents algorismes.
-- **Probes visuals:** Videos que mostren els errors visualment dels algorismes tant d'alçada com amb l'error angular.
+## Key Features
 
-## Tecnologies utilitzades
-- **Llenguatge:** Python 3
-- **Llibreries:** NumPy, SciPy (per a triangulació i càlculs numèrics), Matplotlib (per a visualització).
+* **GRID-TIN Conversion:** Transforms height matrices into optimized polygonal meshes.
+* **Incremental Strategy:** Utilizes a custom greedy algorithm for mesh refinement.
+* **Geometric Optimization:** Implements **Delaunay Triangulation** to guarantee well-conditioned triangles and prevent the formation of "slivers".
+* **Semantic Error Analysis:** Includes comparative metrics (RMSE, MAE, and Maximum Error) evaluating both height discrepancy and angular slope error across different generation algorithms.
+* **Visual Debugging:** Built-in visualization tools to render terrain differences and angular errors.
 
-## Algorismes
-- **original.py:** ALgorisme de GRID a TIN basat amb l'error d'alçada.
-- **pendent7.py:** ALgorisme de GRID a TIN basat amb l'error angular, canviant els diferents modes o el resultat que retorna la funció de ponderació es poden arribar a tots els algorismes que comento a la memòria.
+## Tech Stack
 
-## Tests
-- **bassiero.npy:** Matriu d'alçades dels pic de bassiero als pirineus (1500x1500).
-- **prova_oscar.npy:** Matriu 4x4 per probar el funcionament de l'algorisme.
-- **terrain16.npy:** Matriu 4x4 per probar el funcionament de l'algorisme.
+* **Language:** Python 3
+* **Core Libraries:** * `NumPy` (Matrix operations and data handling)
+  * `SciPy` (Delaunay triangulation and numerical computing)
+  * `Matplotlib` (Terrain rendering and visual analysis)
+
+## Project Structure
+
+* `src/` - Core algorithms for NavMesh generation (includes both height-error and angular-error approaches).
+* `data/` - Test matrices (`.npy` files) including real-world topography data (e.g., Pyrenees Bassiero peak 1500x1500) and smaller 4x4 test matrices.
+* `media/` - Rendered outputs and video demonstrations of the algorithmic error analysis.
+
+## Getting Started
+
+### Prerequisites
+Ensure you have Python 3 installed. You can install the required dependencies using:
+```bash
+pip install numpy scipy matplotlib
