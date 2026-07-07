@@ -1,6 +1,6 @@
 # GRID-TIN Navigation Mesh Generator
 
-An efficient Python algorithm for generating optimized Navigation Meshes from heightmaps (heightfields) in complex outdoor environments. 
+This project is an optimized Python-based implementation for generating **Navigation Meshes (NavMeshes)** from raw heightmaps. Developed as a **Final Degree Project (BSc in Computer Science)** at the *Facultat d’Informàtica de Barcelona (FIB)*. 
 
 The system implements an incremental **GRID to TIN (Triangulated Irregular Network)** strategy that transforms raw height matrices into highly optimized polygonal networks. Unlike traditional methods, this approach provides a much more accurate terrain representation for intelligent agents in video games and simulations by dynamically optimizing triangle density based on slope error.
 
